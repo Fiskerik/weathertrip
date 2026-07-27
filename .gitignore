@@ -2,6 +2,7 @@ node_modules/
 dist/
 .next/
 .expo/
+apps/mobile/.expo-export-test/
 web-build/
 coverage/
 .env

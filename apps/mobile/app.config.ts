@@ -25,7 +25,7 @@ const config: ExpoConfig = {
   android: {
     package: "com.eaconsulting.weathertrip"
   },
-  plugins: ["expo-router"],
+  plugins: [],
   extra: {
     apiUrl: process.env.EXPO_PUBLIC_WEATHERTRIP_API_URL ?? "http://localhost:4100"
   }

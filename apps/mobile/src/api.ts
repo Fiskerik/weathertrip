@@ -1,6 +1,6 @@
 import type { ApiError, RecommendationResponse, TripRequest } from "@weathertrip/shared";
 
-const apiUrl = process.env.EXPO_PUBLIC_WEATHERTRIP_API_URL ?? "http://localhost:4100";
+const apiUrl = "http://localhost:4100";
 
 export async function fetchRecommendations(request: TripRequest): Promise<RecommendationResponse> {
   const response = await fetch(`${apiUrl}/recommendations`, {
