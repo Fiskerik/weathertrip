@@ -4,39 +4,56 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m2
     environment:
-      groups:
-        - app_store_credentials
-      vars:
-        BUNDLE_ID: com.eaconsulting.weathertrip
-      node: 20
+      node: 22
       xcode: latest
       cocoapods: default
+      groups:
+        - app_store_connect
+        - ios_code_signing
+      vars:
+        APP_VERSION: "0.1.0"
+        IOS_BUNDLE_IDENTIFIER: "com.eaconsulting.weathertrip"
+        EXPO_NO_TELEMETRY: "1"
+    integrations:
+      app_store_connect: FamilyCalendarIOS
     triggering:
       events:
         - push
       branch_patterns:
         - pattern: main
           include: true
+          source: true
     scripts:
       - name: Install dependencies
         script: npm ci
+      - name: Set automatic build number
+        script: |
+          echo "APP_BUILD_NUMBER=${BUILD_NUMBER:-1}" >> "$CM_ENV"
+          echo "Building Weathertrip ${APP_VERSION} (${BUILD_NUMBER:-1})"
       - name: Typecheck shared code
         script: npm --workspace @weathertrip/shared run typecheck
       - name: Typecheck mobile app
         script: npm --workspace @weathertrip/mobile run typecheck
       - name: Prebuild iOS project
-        script: npm --workspace @weathertrip/mobile run prebuild:ios
-      - name: Install CocoaPods
-        script: cd apps/mobile/ios && pod install
-      - name: Apply code signing profiles
-        script: xcode-project use-profiles
+        script: |
+          cd apps/mobile
+          npx expo prebuild --platform ios --clean --non-interactive
+      - name: Configure iOS code signing
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$IOS_BUNDLE_IDENTIFIER" --type IOS_APP_STORE --create
+          keychain add-certificates
+          xcode-project use-profiles --project apps/mobile/ios/Weathertrip.xcodeproj
       - name: Build IPA
         script: |
+          cd apps/mobile
           xcode-project build-ipa \
-            --workspace apps/mobile/ios/Weathertrip.xcworkspace \
+            --workspace ios/Weathertrip.xcworkspace \
             --scheme Weathertrip
     artifacts:
-      - build/ios/ipa/*.ipa
+      - apps/mobile/build/ios/ipa/*.ipa
+      - apps/mobile/ios/build/**/*.xcarchive
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
     publishing:
       app_store_connect:
         auth: integration
