@@ -46,8 +46,8 @@ workflows:
           echo "Latest TestFlight build: $LATEST_BUILD_NUMBER"
           echo "Codemagic build number: $CODEMAGIC_BUILD_NUMBER"
           echo "Using iOS build number: $NEW_BUILD_NUMBER"
-      - name: Typecheck shared code
-        script: npm --workspace @weathertrip/shared run typecheck
+      - name: Build shared package
+        script: npm --workspace @weathertrip/shared run build
       - name: Typecheck mobile app
         script: npm --workspace @weathertrip/mobile run typecheck
       - name: Prebuild iOS project
