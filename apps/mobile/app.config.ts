@@ -27,7 +27,7 @@ const config: ExpoConfig = {
   },
   plugins: [],
   extra: {
-    apiUrl: process.env.EXPO_PUBLIC_WEATHERTRIP_API_URL ?? "http://localhost:4100"
+    apiUrl: process.env.EXPO_PUBLIC_WEATHERTRIP_API_URL
   }
 };
 

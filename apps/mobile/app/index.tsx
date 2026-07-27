@@ -101,6 +101,7 @@ export default function HomeScreen() {
   const [selected, setSelected] = useState<Recommendation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [locationStatus, setLocationStatus] = useState<string | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const validation = useMemo(() => validateTripRequest(trip), [trip]);
@@ -173,21 +174,9 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <View style={styles.panel}>
-          <SectionTitle label="Start and dates" />
-          <View style={styles.locationRow}>
-            <TextInput
-              style={[styles.input, styles.locationInput]}
-              value={trip.startLocation.label}
-              placeholder="Start location"
-              onChangeText={(label) => setTrip((current) => ({ ...current, startLocation: { label } }))}
-            />
-            <Pressable style={styles.secondaryButton} onPress={useGpsLocation}>
-              <Text style={styles.secondaryButtonText}>Use GPS</Text>
-            </Pressable>
-          </View>
-          {locationStatus ? <Text style={styles.locationHint}>{locationStatus}</Text> : null}
-          <View style={styles.row}>
+        <View style={styles.tripPanel}>
+          <SectionTitle label="Travel dates" />
+          <View style={styles.dateRow}>
             <Field label="Leave">
               <TextInput
                 style={styles.input}
@@ -207,145 +196,174 @@ export default function HomeScreen() {
             <Text style={styles.label}>Trip length</Text>
             <Text style={styles.valueText}>{formatUnit(trip.durationDays, "days")}</Text>
           </View>
+          <View style={styles.locationRow}>
+            <TextInput
+              style={[styles.input, styles.locationInput]}
+              value={trip.startLocation.label}
+              placeholder="Start location"
+              onChangeText={(label) => setTrip((current) => ({ ...current, startLocation: { label } }))}
+            />
+            <Pressable style={styles.secondaryButton} onPress={useGpsLocation}>
+              <Text style={styles.secondaryButtonText}>GPS</Text>
+            </Pressable>
+          </View>
+          {locationStatus ? <Text style={styles.locationHint}>{locationStatus}</Text> : null}
         </View>
 
-        <View style={styles.panel}>
-          <SectionTitle label="Trip presets" />
-          <View style={styles.presetGrid}>
-            {tripPresets.map((preset) => (
-              <Pressable
-                key={preset.id}
-                style={styles.preset}
-                onPress={() => setTrip((current) => ({ ...current, ...preset.patch }))}
-              >
-                <Text style={styles.presetLabel}>{preset.label}</Text>
-                <Text style={styles.presetText}>{preset.description}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
+        <View style={styles.advancedPanel}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded: advancedOpen }}
+            onPress={() => setAdvancedOpen((open) => !open)}
+            style={styles.advancedHeader}
+          >
+            <View>
+              <Text style={styles.advancedTitle}>Advanced</Text>
+              <Text style={styles.advancedSummary}>
+                Presets, stay style, travel limits, and weather preferences
+              </Text>
+            </View>
+            <Text style={styles.advancedChevron}>{advancedOpen ? "^" : "v"}</Text>
+          </Pressable>
 
-        <View style={styles.panel}>
-          <SectionTitle label="Travel limits" />
-          <View style={styles.segmentRow}>
-            <Segment label="Car" active />
-            <Segment label="Train soon" />
-            <Segment label="Flight soon" />
-          </View>
-          <NumberStepper
-            label="Max travel per day"
-            value={trip.maxHoursPerDay}
-            min={1}
-            max={12}
-            suffix="h"
-            onChange={(maxHoursPerDay) => setTrip((current) => ({ ...current, maxHoursPerDay }))}
-          />
-          <View style={styles.row}>
-            <Field label="Min stay (days)">
-              <TextInput
-                keyboardType="number-pad"
-                style={styles.input}
-                value={String(trip.minStayDays)}
-                onChangeText={(value) =>
-                  setTrip((current) => ({ ...current, minStayDays: Number(value) || 1 }))
-                }
-              />
-            </Field>
-            <Field label="Max stay (days)">
-              <TextInput
-                keyboardType="number-pad"
-                style={styles.input}
-                value={String(trip.maxStayDays)}
-                onChangeText={(value) =>
-                  setTrip((current) => ({ ...current, maxStayDays: Number(value) || 1 }))
-                }
-              />
-            </Field>
-          </View>
-        </View>
+          {advancedOpen ? (
+            <View style={styles.advancedContent}>
+              <SettingGroup label="Trip presets">
+                <View style={styles.presetGrid}>
+                  {tripPresets.map((preset) => (
+                    <Pressable
+                      key={preset.id}
+                      style={styles.preset}
+                      onPress={() => setTrip((current) => ({ ...current, ...preset.patch }))}
+                    >
+                      <Text style={styles.presetLabel}>{preset.label}</Text>
+                      <Text style={styles.presetText}>{preset.description}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </SettingGroup>
 
-        <View style={styles.panel}>
-          <SectionTitle label="Stay style" />
-          <View style={styles.chips}>
-            {accommodationOptions.map((tag) => {
-              const active = trip.accommodations.includes(tag);
-              return (
-                <Pressable
-                  key={tag}
-                  style={[styles.chip, active && styles.chipActive]}
-                  onPress={() =>
+              <SettingGroup label="Travel limits">
+                <View style={styles.segmentRow}>
+                  <Segment label="Car" active />
+                  <Segment label="Train soon" />
+                  <Segment label="Flight soon" />
+                </View>
+                <NumberStepper
+                  label="Max travel per day"
+                  value={trip.maxHoursPerDay}
+                  min={1}
+                  max={12}
+                  suffix="h"
+                  onChange={(maxHoursPerDay) => setTrip((current) => ({ ...current, maxHoursPerDay }))}
+                />
+                <View style={styles.dateRow}>
+                  <Field label="Min stay">
+                    <TextInput
+                      keyboardType="number-pad"
+                      style={styles.input}
+                      value={String(trip.minStayDays)}
+                      onChangeText={(value) =>
+                        setTrip((current) => ({ ...current, minStayDays: Number(value) || 1 }))
+                      }
+                    />
+                  </Field>
+                  <Field label="Max stay">
+                    <TextInput
+                      keyboardType="number-pad"
+                      style={styles.input}
+                      value={String(trip.maxStayDays)}
+                      onChangeText={(value) =>
+                        setTrip((current) => ({ ...current, maxStayDays: Number(value) || 1 }))
+                      }
+                    />
+                  </Field>
+                </View>
+              </SettingGroup>
+
+              <SettingGroup label="Stay style">
+                <View style={styles.chips}>
+                  {accommodationOptions.map((tag) => {
+                    const active = trip.accommodations.includes(tag);
+                    return (
+                      <Pressable
+                        key={tag}
+                        style={[styles.chip, active && styles.chipActive]}
+                        onPress={() =>
+                          setTrip((current) => ({
+                            ...current,
+                            accommodations: active
+                              ? current.accommodations.filter((item) => item !== tag)
+                              : [...current.accommodations, tag]
+                          }))
+                        }
+                      >
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                          {accommodationLabels[tag]}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </SettingGroup>
+
+              <SettingGroup label="Weather preferences">
+                <NumberStepper
+                  label="Minimum temp"
+                  value={trip.weather.tempMinC}
+                  min={4}
+                  max={28}
+                  suffix="C"
+                  onChange={(tempMinC) =>
+                    setTrip((current) => ({ ...current, weather: { ...current.weather, tempMinC } }))
+                  }
+                />
+                <NumberStepper
+                  label="Maximum temp"
+                  value={trip.weather.tempMaxC}
+                  min={10}
+                  max={36}
+                  suffix="C"
+                  onChange={(tempMaxC) =>
+                    setTrip((current) => ({ ...current, weather: { ...current.weather, tempMaxC } }))
+                  }
+                />
+                <NumberStepper
+                  label="Max rain"
+                  value={trip.weather.maxPrecipitationMm}
+                  min={0}
+                  max={12}
+                  suffix="mm"
+                  onChange={(maxPrecipitationMm) =>
                     setTrip((current) => ({
                       ...current,
-                      accommodations: active
-                        ? current.accommodations.filter((item) => item !== tag)
-                        : [...current.accommodations, tag]
+                      weather: { ...current.weather, maxPrecipitationMm }
                     }))
                   }
-                >
-                  <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                    {accommodationLabels[tag]}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        <View style={styles.panel}>
-          <SectionTitle label="Weather preferences" />
-          <NumberStepper
-            label="Minimum temp"
-            value={trip.weather.tempMinC}
-            min={4}
-            max={28}
-            suffix="C"
-            onChange={(tempMinC) =>
-              setTrip((current) => ({ ...current, weather: { ...current.weather, tempMinC } }))
-            }
-          />
-          <NumberStepper
-            label="Maximum temp"
-            value={trip.weather.tempMaxC}
-            min={10}
-            max={36}
-            suffix="C"
-            onChange={(tempMaxC) =>
-              setTrip((current) => ({ ...current, weather: { ...current.weather, tempMaxC } }))
-            }
-          />
-          <NumberStepper
-            label="Max rain"
-            value={trip.weather.maxPrecipitationMm}
-            min={0}
-            max={12}
-            suffix="mm"
-            onChange={(maxPrecipitationMm) =>
-              setTrip((current) => ({
-                ...current,
-                weather: { ...current.weather, maxPrecipitationMm }
-              }))
-            }
-          />
-          <NumberStepper
-            label="Sunshine"
-            value={trip.weather.minSunshineHours}
-            min={1}
-            max={12}
-            suffix="h"
-            onChange={(minSunshineHours) =>
-              setTrip((current) => ({ ...current, weather: { ...current.weather, minSunshineHours } }))
-            }
-          />
-          <NumberStepper
-            label="Wind tolerance"
-            value={trip.weather.maxWindKph}
-            min={10}
-            max={55}
-            suffix="kph"
-            onChange={(maxWindKph) =>
-              setTrip((current) => ({ ...current, weather: { ...current.weather, maxWindKph } }))
-            }
-          />
+                />
+                <NumberStepper
+                  label="Sunshine"
+                  value={trip.weather.minSunshineHours}
+                  min={1}
+                  max={12}
+                  suffix="h"
+                  onChange={(minSunshineHours) =>
+                    setTrip((current) => ({ ...current, weather: { ...current.weather, minSunshineHours } }))
+                  }
+                />
+                <NumberStepper
+                  label="Wind tolerance"
+                  value={trip.weather.maxWindKph}
+                  min={10}
+                  max={55}
+                  suffix="kph"
+                  onChange={(maxWindKph) =>
+                    setTrip((current) => ({ ...current, weather: { ...current.weather, maxWindKph } }))
+                  }
+                />
+              </SettingGroup>
+            </View>
+          ) : null}
         </View>
 
         {validation ? (
@@ -438,6 +456,15 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
+      {children}
+    </View>
+  );
+}
+
+function SettingGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.settingGroup}>
+      <Text style={styles.settingTitle}>{label}</Text>
       {children}
     </View>
   );
@@ -583,29 +610,29 @@ const styles = StyleSheet.create({
     backgroundColor: colors.paper
   },
   page: {
-    gap: 14,
-    padding: 18,
+    gap: 12,
+    padding: 16,
     paddingBottom: 34
   },
   header: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 2
+    marginBottom: 4
   },
   kicker: {
     color: colors.green,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     textTransform: "uppercase"
   },
   title: {
     color: colors.ink,
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: "800",
     letterSpacing: 0,
-    lineHeight: 36,
-    maxWidth: 280
+    lineHeight: 31,
+    maxWidth: 245
   },
   weatherBadge: {
     alignItems: "center",
@@ -627,6 +654,63 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 12,
     padding: 14
+  },
+  tripPanel: {
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 10,
+    padding: 14
+  },
+  advancedPanel: {
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    overflow: "hidden"
+  },
+  advancedHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+    minHeight: 58,
+    paddingHorizontal: 14,
+    paddingVertical: 10
+  },
+  advancedTitle: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  advancedSummary: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 17,
+    maxWidth: 260,
+    marginTop: 2
+  },
+  advancedChevron: {
+    color: colors.green,
+    fontSize: 18,
+    fontWeight: "900"
+  },
+  advancedContent: {
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    gap: 16,
+    padding: 14,
+    paddingTop: 12
+  },
+  settingGroup: {
+    gap: 10
+  },
+  settingTitle: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "900"
   },
   sectionTitle: {
     alignItems: "center",
@@ -650,14 +734,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     color: colors.ink,
-    fontSize: 16,
-    minHeight: 46,
+    fontSize: 15,
+    minHeight: 44,
     paddingHorizontal: 12
   },
   locationRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 10
+    gap: 8
   },
   locationInput: {
     flex: 1
@@ -670,8 +754,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: "row",
     gap: 6,
-    minHeight: 46,
-    paddingHorizontal: 11
+    justifyContent: "center",
+    minHeight: 44,
+    minWidth: 62,
+    paddingHorizontal: 10
   },
   secondaryButtonText: {
     color: colors.blue,
@@ -696,6 +782,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12
   },
   row: {
+    flexDirection: "row",
+    gap: 10
+  },
+  dateRow: {
     flexDirection: "row",
     gap: 10
   },
@@ -724,16 +814,16 @@ const styles = StyleSheet.create({
   stepperRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 10,
-    minHeight: 38
+    gap: 9,
+    minHeight: 36
   },
   stepperButton: {
     alignItems: "center",
     backgroundColor: colors.green,
     borderRadius: 8,
-    height: 36,
+    height: 34,
     justifyContent: "center",
-    width: 42
+    width: 40
   },
   stepperButtonDisabled: {
     opacity: 0.35
@@ -756,14 +846,14 @@ const styles = StyleSheet.create({
     height: "100%"
   },
   presetGrid: {
-    gap: 10
+    gap: 8
   },
   preset: {
-    backgroundColor: colors.greenSoft,
-    borderColor: "#b9dccb",
+    backgroundColor: "#fbfaf7",
+    borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
-    padding: 12
+    padding: 11
   },
   presetLabel: {
     color: colors.ink,
@@ -778,6 +868,7 @@ const styles = StyleSheet.create({
   },
   segmentRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8
   },
   segment: {
