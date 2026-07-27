@@ -17,6 +17,7 @@ const config: ExpoConfig = {
     supportsTablet: false,
     bundleIdentifier: "com.eaconsulting.weathertrip",
     infoPlist: {
+      ITSAppUsesNonExemptEncryption: false,
       NSLocationWhenInUseUsageDescription:
         "Weathertrip uses your location to suggest weather-friendly trips from where you are."
     }

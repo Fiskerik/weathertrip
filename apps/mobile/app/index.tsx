@@ -10,9 +10,7 @@ import {
   TextInput,
   View
 } from "react-native";
-import Slider from "@react-native-community/slider";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { CalendarDays, Car, CloudSun, LocateFixed, MapPin, Navigation, Tent, Wind } from "lucide-react-native";
 import {
   accommodationLabels,
   tripPresets,
@@ -65,27 +63,31 @@ export default function HomeScreen() {
 
   async function useGpsLocation() {
     setLocationStatus("Waiting for GPS signal...");
-    const permission = await Location.requestForegroundPermissionsAsync();
-    if (permission.status !== "granted") {
-      setLocationStatus("Location permission was not granted.");
-      return;
-    }
-
-    const position = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced
-    });
-    const coordinates = {
-      latitude: roundCoordinate(position.coords.latitude),
-      longitude: roundCoordinate(position.coords.longitude)
-    };
-    setTrip((current) => ({
-      ...current,
-      startLocation: {
-        label: "Current location",
-        coordinates
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== "granted") {
+        setLocationStatus("Location permission was not granted.");
+        return;
       }
-    }));
-    setLocationStatus(`GPS set: ${coordinates.latitude}, ${coordinates.longitude}`);
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced
+      });
+      const coordinates = {
+        latitude: roundCoordinate(position.coords.latitude),
+        longitude: roundCoordinate(position.coords.longitude)
+      };
+      setTrip((current) => ({
+        ...current,
+        startLocation: {
+          label: "Current location",
+          coordinates
+        }
+      }));
+      setLocationStatus(`GPS set: ${coordinates.latitude}, ${coordinates.longitude}`);
+    } catch {
+      setLocationStatus("Could not read GPS location.");
+    }
   }
 
   return (
@@ -97,12 +99,12 @@ export default function HomeScreen() {
             <Text style={styles.title}>Plan around the forecast.</Text>
           </View>
           <View style={styles.weatherBadge}>
-            <CloudSun size={22} color={colors.blue} />
+            <Text style={styles.weatherBadgeText}>WT</Text>
           </View>
         </View>
 
         <View style={styles.panel}>
-          <SectionTitle icon={<MapPin size={18} color={colors.green} />} label="Start and dates" />
+          <SectionTitle label="Start and dates" />
           <View style={styles.locationRow}>
             <TextInput
               style={[styles.input, styles.locationInput]}
@@ -111,7 +113,6 @@ export default function HomeScreen() {
               onChangeText={(label) => setTrip((current) => ({ ...current, startLocation: { label } }))}
             />
             <Pressable style={styles.secondaryButton} onPress={useGpsLocation}>
-              <LocateFixed size={16} color={colors.blue} />
               <Text style={styles.secondaryButtonText}>Use GPS</Text>
             </Pressable>
           </View>
@@ -139,7 +140,7 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.panel}>
-          <SectionTitle icon={<Navigation size={18} color={colors.green} />} label="Trip presets" />
+          <SectionTitle label="Trip presets" />
           <View style={styles.presetGrid}>
             {tripPresets.map((preset) => (
               <Pressable
@@ -155,13 +156,13 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.panel}>
-          <SectionTitle icon={<Car size={18} color={colors.green} />} label="Travel limits" />
+          <SectionTitle label="Travel limits" />
           <View style={styles.segmentRow}>
             <Segment label="Car" active />
             <Segment label="Train soon" />
             <Segment label="Flight soon" />
           </View>
-          <NumberSlider
+          <NumberStepper
             label="Max travel per day"
             value={trip.maxHoursPerDay}
             min={1}
@@ -194,7 +195,7 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.panel}>
-          <SectionTitle icon={<Tent size={18} color={colors.green} />} label="Stay style" />
+          <SectionTitle label="Stay style" />
           <View style={styles.chips}>
             {accommodationOptions.map((tag) => {
               const active = trip.accommodations.includes(tag);
@@ -221,28 +222,28 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.panel}>
-          <SectionTitle icon={<Wind size={18} color={colors.green} />} label="Weather preferences" />
-          <NumberSlider
+          <SectionTitle label="Weather preferences" />
+          <NumberStepper
             label="Minimum temp"
             value={trip.weather.tempMinC}
             min={4}
             max={28}
-            suffix="°C"
+            suffix="C"
             onChange={(tempMinC) =>
               setTrip((current) => ({ ...current, weather: { ...current.weather, tempMinC } }))
             }
           />
-          <NumberSlider
+          <NumberStepper
             label="Maximum temp"
             value={trip.weather.tempMaxC}
             min={10}
             max={36}
-            suffix="°C"
+            suffix="C"
             onChange={(tempMaxC) =>
               setTrip((current) => ({ ...current, weather: { ...current.weather, tempMaxC } }))
             }
           />
-          <NumberSlider
+          <NumberStepper
             label="Max rain"
             value={trip.weather.maxPrecipitationMm}
             min={0}
@@ -255,7 +256,7 @@ export default function HomeScreen() {
               }))
             }
           />
-          <NumberSlider
+          <NumberStepper
             label="Sunshine"
             value={trip.weather.minSunshineHours}
             min={1}
@@ -265,7 +266,7 @@ export default function HomeScreen() {
               setTrip((current) => ({ ...current, weather: { ...current.weather, minSunshineHours } }))
             }
           />
-          <NumberSlider
+          <NumberStepper
             label="Wind tolerance"
             value={trip.weather.maxWindKph}
             min={10}
@@ -298,7 +299,7 @@ export default function HomeScreen() {
         {result ? (
           <View style={styles.results}>
             <View style={styles.summaryCard}>
-              <SectionTitle icon={<CalendarDays size={18} color={colors.blue} />} label="Plan summary" />
+              <SectionTitle label="Plan summary" />
               <Text style={styles.summaryText}>{result.planSummary}</Text>
             </View>
 
@@ -351,7 +352,7 @@ function DestinationDetail({ recommendation }: { recommendation: Recommendation 
         <View key={day.date} style={styles.dayRow}>
           <Text style={styles.dayDate}>{day.date.slice(5)}</Text>
           <Text style={styles.dayText}>
-            {day.tempMinC}-{day.tempMaxC} °C, {day.precipitationMm} mm, {day.sunshineHours} h sun
+            {day.tempMinC}-{day.tempMaxC} C, {day.precipitationMm} mm, {day.sunshineHours} h sun
           </Text>
         </View>
       ))}
@@ -372,7 +373,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function NumberSlider({
+function NumberStepper({
   label,
   value,
   min,
@@ -387,30 +388,49 @@ function NumberSlider({
   suffix: string;
   onChange: (value: number) => void;
 }) {
+  const decrement = () => onChange(Math.max(min, value - 1));
+  const increment = () => onChange(Math.min(max, value + 1));
+
   return (
     <View style={styles.sliderBlock}>
       <View style={styles.sliderLabelRow}>
         <Text style={styles.label}>{label}</Text>
         <Text style={styles.valueText}>{formatUnit(value, suffix)}</Text>
       </View>
-      <Slider
-        value={value}
-        minimumValue={min}
-        maximumValue={max}
-        step={1}
-        minimumTrackTintColor={colors.green}
-        maximumTrackTintColor={colors.line}
-        thumbTintColor={colors.green}
-        onValueChange={onChange}
-      />
+      <View style={styles.stepperRow}>
+        <Pressable
+          accessibilityRole="button"
+          disabled={value <= min}
+          onPress={decrement}
+          style={[styles.stepperButton, value <= min && styles.stepperButtonDisabled]}
+        >
+          <Text style={styles.stepperButtonText}>-</Text>
+        </Pressable>
+        <View style={styles.stepperTrack}>
+          <View
+            style={[
+              styles.stepperFill,
+              { width: `${((value - min) / Math.max(1, max - min)) * 100}%` }
+            ]}
+          />
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          disabled={value >= max}
+          onPress={increment}
+          style={[styles.stepperButton, value >= max && styles.stepperButtonDisabled]}
+        >
+          <Text style={styles.stepperButtonText}>+</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
-function SectionTitle({ icon, label }: { icon: React.ReactNode; label: string }) {
+function SectionTitle({ label }: { label: string }) {
   return (
     <View style={styles.sectionTitle}>
-      {icon}
+      <View style={styles.sectionDot} />
       <Text style={styles.sectionTitleText}>{label}</Text>
     </View>
   );
@@ -478,6 +498,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 48
   },
+  weatherBadgeText: {
+    color: colors.blue,
+    fontSize: 15,
+    fontWeight: "900"
+  },
   panel: {
     backgroundColor: colors.surface,
     borderColor: colors.line,
@@ -490,6 +515,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 8
+  },
+  sectionDot: {
+    backgroundColor: colors.green,
+    borderRadius: 5,
+    height: 10,
+    width: 10
   },
   sectionTitleText: {
     color: colors.ink,
@@ -561,7 +592,7 @@ const styles = StyleSheet.create({
     fontWeight: "700"
   },
   sliderBlock: {
-    gap: 4
+    gap: 8
   },
   sliderLabelRow: {
     alignItems: "center",
@@ -572,6 +603,40 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 14,
     fontWeight: "800"
+  },
+  stepperRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 38
+  },
+  stepperButton: {
+    alignItems: "center",
+    backgroundColor: colors.green,
+    borderRadius: 8,
+    height: 36,
+    justifyContent: "center",
+    width: 42
+  },
+  stepperButtonDisabled: {
+    opacity: 0.35
+  },
+  stepperButtonText: {
+    color: "#ffffff",
+    fontSize: 20,
+    fontWeight: "900",
+    lineHeight: 22
+  },
+  stepperTrack: {
+    backgroundColor: colors.line,
+    borderRadius: 8,
+    flex: 1,
+    height: 10,
+    overflow: "hidden"
+  },
+  stepperFill: {
+    backgroundColor: colors.green,
+    height: "100%"
   },
   presetGrid: {
     gap: 10
