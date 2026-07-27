@@ -27,8 +27,25 @@ workflows:
         script: npm ci
       - name: Set automatic build number
         script: |
-          echo "APP_BUILD_NUMBER=${BUILD_NUMBER:-1}" >> "$CM_ENV"
-          echo "Building Weathertrip ${APP_VERSION} (${BUILD_NUMBER:-1})"
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-testflight-build-number "$IOS_BUNDLE_IDENTIFIER" --all-versions 2>/dev/null || true)
+          case "$LATEST_BUILD_NUMBER" in
+            ''|*[!0-9]*) LATEST_BUILD_NUMBER=0 ;;
+          esac
+
+          CODEMAGIC_BUILD_NUMBER="${PROJECT_BUILD_NUMBER:-${BUILD_NUMBER:-0}}"
+          case "$CODEMAGIC_BUILD_NUMBER" in
+            ''|*[!0-9]*) CODEMAGIC_BUILD_NUMBER=0 ;;
+          esac
+
+          NEW_BUILD_NUMBER=$((LATEST_BUILD_NUMBER + 1))
+          if [ "$CODEMAGIC_BUILD_NUMBER" -gt "$NEW_BUILD_NUMBER" ]; then
+            NEW_BUILD_NUMBER="$CODEMAGIC_BUILD_NUMBER"
+          fi
+
+          echo "APP_BUILD_NUMBER=$NEW_BUILD_NUMBER" >> "$CM_ENV"
+          echo "Latest TestFlight build: $LATEST_BUILD_NUMBER"
+          echo "Codemagic build number: $CODEMAGIC_BUILD_NUMBER"
+          echo "Using iOS build number: $NEW_BUILD_NUMBER"
       - name: Typecheck shared code
         script: npm --workspace @weathertrip/shared run typecheck
       - name: Typecheck mobile app
@@ -37,6 +54,14 @@ workflows:
         script: |
           cd apps/mobile
           npx expo prebuild --platform ios --clean --non-interactive
+      - name: Confirm iOS build number
+        script: |
+          cd apps/mobile/ios
+          if [ -n "$APP_VERSION" ]; then
+            xcrun agvtool new-marketing-version "$APP_VERSION"
+          fi
+          xcrun agvtool new-version -all "$APP_BUILD_NUMBER"
+          echo "Set Xcode build number to $APP_BUILD_NUMBER"
       - name: Configure iOS code signing
         script: |
           keychain initialize
