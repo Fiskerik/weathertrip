@@ -5,7 +5,7 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       node: 22
-      xcode: latest
+      xcode: 26.4
       cocoapods: default
       groups:
         - code-signing
@@ -92,13 +92,21 @@ workflows:
       - name: Build IPA
         script: |
           cd apps/mobile
+          set +e
+          BUILD_LOG="/tmp/weathertrip-xcodebuild.log"
           xcode-project build-ipa \
             --workspace ios/Weathertrip.xcworkspace \
             --scheme Weathertrip \
-            --archive-flags="-destination 'generic/platform=iOS'"
+            --archive-flags="-destination 'generic/platform=iOS'" 2>&1 | tee "$BUILD_LOG"
+          BUILD_STATUS=${PIPESTATUS[0]}
+          echo "Xcode archive status: $BUILD_STATUS"
+          echo "Relevant Xcode failures:"
+          grep -E "error:|Command PhaseScriptExecution failed|fatal error|Code Sign error|Provisioning|No profiles|requires a provisioning profile" "$BUILD_LOG" || true
+          exit "$BUILD_STATUS"
     artifacts:
       - apps/mobile/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
+      - /tmp/weathertrip-xcodebuild.log
       - apps/mobile/ios/build/**/*.xcarchive
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
     publishing:
