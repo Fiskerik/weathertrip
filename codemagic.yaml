@@ -94,9 +94,11 @@ workflows:
           cd apps/mobile
           xcode-project build-ipa \
             --workspace ios/Weathertrip.xcworkspace \
-            --scheme Weathertrip
+            --scheme Weathertrip \
+            --archive-flags="-destination 'generic/platform=iOS'"
     artifacts:
       - apps/mobile/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
       - apps/mobile/ios/build/**/*.xcarchive
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
     publishing:
