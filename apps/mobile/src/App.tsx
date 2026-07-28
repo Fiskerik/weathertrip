@@ -1,17 +1,49 @@
+import { NavigationContainer, type NavigatorScreenParams } from "@react-navigation/native";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { StatusBar } from "expo-status-bar";
+import { Home, Map, UserRound } from "lucide-react-native";
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { StatusBar, StyleSheet, Text, View } from "react-native";
-
-import HomeScreen from "../app";
+import { StyleSheet, Text, View } from "react-native";
+import { ProfileScreen, PlanScreen, SavedTripScreen, TripsScreen } from "./screens";
 import { colors } from "./theme";
 
-type State = {
-  error: Error | null;
+export type RootStackParamList = {
+  Tabs: NavigatorScreenParams<TabParamList> | undefined;
+  SavedTrip: { tripId: string };
 };
 
-class AppErrorBoundary extends Component<{ children: ReactNode }, State> {
-  state: State = { error: null };
+export type TabParamList = {
+  Plan: undefined;
+  Trips: undefined;
+  Profile: undefined;
+};
 
-  static getDerivedStateFromError(error: Error): State {
+const Stack = createNativeStackNavigator<RootStackParamList>();
+const Tabs = createBottomTabNavigator<TabParamList>();
+
+function TabNavigator() {
+  return (
+    <Tabs.Navigator
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: colors.green,
+        tabBarInactiveTintColor: colors.muted,
+        tabBarLabelStyle: styles.tabLabel,
+        tabBarStyle: styles.tabBar
+      }}
+    >
+      <Tabs.Screen name="Plan" component={PlanScreen} options={{ tabBarIcon: ({ color }) => <Home size={21} color={color} /> }} />
+      <Tabs.Screen name="Trips" component={TripsScreen} options={{ tabBarIcon: ({ color }) => <Map size={21} color={color} /> }} />
+      <Tabs.Screen name="Profile" component={ProfileScreen} options={{ tabBarIcon: ({ color }) => <UserRound size={21} color={color} /> }} />
+    </Tabs.Navigator>
+  );
+}
+
+class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
     return { error };
   }
 
@@ -23,12 +55,11 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, State> {
     if (this.state.error) {
       return (
         <View style={styles.errorScreen}>
-          <Text style={styles.errorTitle}>Weathertrip hit a startup error</Text>
+          <Text style={styles.errorTitle}>Weathertrip could not open</Text>
           <Text style={styles.errorMessage}>{this.state.error.message}</Text>
         </View>
       );
     }
-
     return this.props.children;
   }
 }
@@ -36,13 +67,29 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, State> {
 export default function App() {
   return (
     <AppErrorBoundary>
-      <StatusBar barStyle="dark-content" />
-      <HomeScreen />
+      <NavigationContainer>
+        <StatusBar style="dark" />
+        <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.paper } }}>
+          <Stack.Screen name="Tabs" component={TabNavigator} />
+          <Stack.Screen name="SavedTrip" component={SavedTripScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
     </AppErrorBoundary>
   );
 }
 
 const styles = StyleSheet.create({
+  tabBar: {
+    backgroundColor: colors.surface,
+    borderTopColor: colors.line,
+    height: 68,
+    paddingBottom: 8,
+    paddingTop: 7
+  },
+  tabLabel: {
+    fontSize: 11,
+    fontWeight: "700"
+  },
   errorScreen: {
     alignItems: "center",
     backgroundColor: colors.paper,

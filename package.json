@@ -19,6 +19,7 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "pngjs": "^7.0.0",
     "typescript": "^5.5.4"
   }
 }

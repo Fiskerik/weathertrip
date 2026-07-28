@@ -175,4 +175,115 @@ export type RecommendationResponse = {
 export type ApiError = {
   error: string;
   details?: string[];
+  code?: string;
+};
+
+export type WeatherGoal = "sunny" | "dry" | "warm" | "cool" | "balanced";
+export type PlaceCountMode = "smart" | 1 | 2 | 3 | 4;
+export type BorderRule = "anywhere" | "leave-country" | "stay-country";
+export type TemperatureComfort = "cool" | "mild" | "warm";
+
+export type TripBrief = {
+  startLocation: {
+    label: string;
+    country?: string;
+    coordinates: Coordinates;
+  };
+  dateRange: {
+    start: string;
+    end: string;
+  };
+  durationDays: number;
+  weatherGoal: WeatherGoal;
+  temperatureComfort?: TemperatureComfort;
+  maxDriveHoursPerDay: number;
+  placeCount: PlaceCountMode;
+  borderRule: BorderRule;
+  travelers: TravelerProfile;
+  accommodations: AccommodationTag[];
+  budget: BudgetLevel;
+};
+
+export type BreakStopKind = "comfort" | "lunch" | "charging";
+
+export type BreakStop = {
+  id: string;
+  kind: BreakStopKind;
+  title: string;
+  detail: string;
+  durationMinutes: number;
+  plannedAfterDrivingMinutes: number;
+  locationName: string;
+  coordinates?: Coordinates;
+  amenitiesVerified: boolean;
+};
+
+export type PlanLeg = {
+  id: string;
+  day: number;
+  fromName: string;
+  toName: string;
+  distanceKm: number;
+  drivingMinutes: number;
+  elapsedMinutes: number;
+  routePath: Coordinates[];
+  breaks: BreakStop[];
+  source: "openrouteservice" | "estimate";
+};
+
+export type PlanStop = {
+  id: string;
+  destination: Destination;
+  arrivalDate: string;
+  departureDate: string;
+  nights: number;
+  sunshineHours: number;
+  forecast: DailyForecast[];
+  why: string;
+  accommodationSuggestions: AccommodationSuggestion[];
+};
+
+export type TripPlan = {
+  id: string;
+  title: string;
+  score: number;
+  confidence: "high" | "medium" | "low";
+  summary: string;
+  totalDistanceKm: number;
+  totalDrivingMinutes: number;
+  longestDrivingDayMinutes: number;
+  countries: string[];
+  stops: PlanStop[];
+  legs: PlanLeg[];
+  generatedAt: string;
+};
+
+export type PlanResponse = {
+  generatedAt: string;
+  primaryPlan: TripPlan;
+  alternatives: TripPlan[];
+};
+
+export type UserProfile = {
+  id: string;
+  email?: string;
+  displayName?: string;
+  homeLocation?: TripBrief["startLocation"];
+  units: "metric" | "imperial";
+  defaultAdults: number;
+  defaultChildren: number;
+  defaultHasEv: boolean;
+  defaultMaxDriveHours: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SavedTrip = {
+  id: string;
+  title: string;
+  brief: TripBrief;
+  plan: TripPlan;
+  createdAt: string;
+  updatedAt: string;
+  source: "local" | "cloud";
 };

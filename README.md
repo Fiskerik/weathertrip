@@ -1,13 +1,13 @@
 # Weathertrip
 
-Weathertrip helps people plan trips around the weather. This MVP contains an iOS-first Expo app, a Vercel-ready web app, a TypeScript recommendations API, and shared trip/scoring logic.
+Weathertrip helps people plan simple European road trips around the weather. The current MVP contains an iOS-first Expo app, a Vercel-ready web app, a Docker-ready Express API, Supabase account/saved-trip routes, and shared planning logic.
 
 ## Workspace
 
 - `apps/mobile` - Expo React Native app for the App Store/TestFlight slice.
 - `apps/web` - Next.js planning UI prepared for Vercel.
-- `services/api` - TypeScript API with `POST /recommendations`.
-- `packages/shared` - shared destination data, trip types, presets, validation, and scoring.
+- `services/api` - TypeScript API with `POST /v2/plans`, profile, and saved-trip routes.
+- `packages/shared` - shared destination catalog, trip contracts, validation, break scheduling, and scoring.
 
 ## Local Setup
 
@@ -36,7 +36,11 @@ Weathertrip helps people plan trips around the weather. This MVP contains an iOS
    npm run dev:mobile
    ```
 
-The apps expect the API at `http://localhost:4100` by default. Override with `NEXT_PUBLIC_WEATHERTRIP_API_URL` for web or `EXPO_PUBLIC_WEATHERTRIP_API_URL` for Expo.
+The apps use `http://localhost:4100` only during development. Override `NEXT_PUBLIC_WEATHERTRIP_API_URL` for web or `EXPO_PUBLIC_WEATHERTRIP_API_URL` for Expo. Release builds fail unless the Expo API URL is a public HTTPS URL.
+
+For the API, set `OPEN-METEO` and routing credentials only on the server when available. Supabase server values are `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`; the mobile app only receives `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`. Apply `services/api/supabase.sql` to the Supabase project before enabling cloud saves.
+
+Railway can deploy `services/api/Dockerfile` from the repository root. Set its `PORT`/`WEATHERTRIP_API_PORT`, provider keys, and Supabase service credentials there. Add the generated Railway HTTPS domain and public Supabase values to the Codemagic environment group used by `ios-testflight`.
 
 ## Checks
 
@@ -48,8 +52,10 @@ npm --workspace @weathertrip/api run smoke
 
 ## MVP Notes
 
-- Forecasts are fetched by the backend from Open-Meteo.
-- Destinations are curated static data for Scandinavia and Central Europe.
+- Forecasts are fetched and cached by the backend from Open-Meteo.
+- Destinations are curated static data for Northern, Western, and Central Europe.
+- Guest saved trips use AsyncStorage; signed-in users can migrate them to Supabase.
+- The plan response includes one map-first route and two alternatives when the brief has enough feasible choices.
 - The mobile bundle ID is `com.eaconsulting.weathertrip`.
 - Codemagic has a starter iOS TestFlight workflow in `codemagic.yaml`.
 - Vercel can target `apps/web` for the web UI.

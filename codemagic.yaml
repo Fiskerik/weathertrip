@@ -50,6 +50,17 @@ workflows:
         script: npm --workspace @weathertrip/shared run build
       - name: Typecheck mobile app
         script: npm --workspace @weathertrip/mobile run typecheck
+      - name: Validate production app configuration
+        script: |
+          case "${EXPO_PUBLIC_WEATHERTRIP_API_URL:-}" in
+            https://*) ;;
+            *) echo "EXPO_PUBLIC_WEATHERTRIP_API_URL must be an HTTPS Railway URL"; exit 1 ;;
+          esac
+          case "${EXPO_PUBLIC_WEATHERTRIP_API_URL:-}" in
+            https://localhost*|https://127.0.0.1*) echo "EXPO_PUBLIC_WEATHERTRIP_API_URL cannot point to localhost"; exit 1 ;;
+          esac
+          test -n "${EXPO_PUBLIC_SUPABASE_URL:-}" || { echo "EXPO_PUBLIC_SUPABASE_URL is missing"; exit 1; }
+          test -n "${EXPO_PUBLIC_SUPABASE_ANON_KEY:-}" || { echo "EXPO_PUBLIC_SUPABASE_ANON_KEY is missing"; exit 1; }
       - name: Prebuild iOS project
         script: |
           cd apps/mobile

@@ -1,6 +1,6 @@
 import type { ExpoConfig } from "expo/config";
 
-const config: ExpoConfig = {
+const config = {
   name: "Weathertrip",
   slug: "weathertrip",
   scheme: "weathertrip",
@@ -16,6 +16,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: false,
     bundleIdentifier: "com.eaconsulting.weathertrip",
+    usesAppleSignIn: true,
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
       NSLocationWhenInUseUsageDescription:
@@ -23,12 +24,18 @@ const config: ExpoConfig = {
     }
   },
   android: {
-    package: "com.eaconsulting.weathertrip"
+    package: "com.eaconsulting.weathertrip",
+    adaptiveIcon: {
+      foregroundImage: "./assets/icon-foreground.png",
+      backgroundColor: "#f7f4ee"
+    }
   },
-  plugins: [],
+  plugins: ["expo-secure-store", "expo-apple-authentication", "expo-status-bar"],
   extra: {
-    apiUrl: process.env.EXPO_PUBLIC_WEATHERTRIP_API_URL
+    apiUrl: process.env.EXPO_PUBLIC_WEATHERTRIP_API_URL,
+    supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
+    supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
   }
-};
+} as unknown as ExpoConfig;
 
 export default config;
