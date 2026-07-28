@@ -1,6 +1,8 @@
 FROM node:20-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
+COPY apps/mobile/package.json apps/mobile/package.json
+COPY apps/web/package.json apps/web/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY services/api/package.json services/api/package.json
 RUN npm ci

@@ -42,6 +42,8 @@ For the API, set `OPEN-METEO` and routing credentials only on the server when av
 
 Railway can deploy `services/api/Dockerfile` from the repository root. Set its `PORT`/`WEATHERTRIP_API_PORT`, provider keys, and Supabase service credentials there. Add the generated Railway HTTPS domain and public Supabase values to the Codemagic environment group used by `ios-testflight`.
 
+The TestFlight workflow requires these Codemagic variables: `EXPO_PUBLIC_WEATHERTRIP_API_URL` (for example, `https://weathertrip-api-production.up.railway.app`), `EXPO_PUBLIC_SUPABASE_URL`, and `EXPO_PUBLIC_SUPABASE_ANON_KEY`. They must be added to an environment group attached to the `ios-testflight` workflow; do not put the real values in `codemagic.yaml` or commit them. The build intentionally stops when the API URL is missing, non-HTTPS, or local.
+
 ## Checks
 
 ```bash

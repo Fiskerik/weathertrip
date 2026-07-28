@@ -50,8 +50,8 @@ app.post("/v2/plans", async (request, response) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`Weathertrip API listening on http://localhost:${port}`);
+app.listen(port, "0.0.0.0", () => {
+  console.log(`Weathertrip API listening on port ${port}`);
 });
 
 function isApiError(value: unknown): value is ApiError {

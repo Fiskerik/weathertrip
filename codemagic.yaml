@@ -52,15 +52,19 @@ workflows:
         script: npm --workspace @weathertrip/mobile run typecheck
       - name: Validate production app configuration
         script: |
-          case "${EXPO_PUBLIC_WEATHERTRIP_API_URL:-}" in
+          API_URL="${EXPO_PUBLIC_WEATHERTRIP_API_URL:-}"
+          if [ -z "$API_URL" ]; then
+            echo "EXPO_PUBLIC_WEATHERTRIP_API_URL is missing. Add the public Railway HTTPS URL to the Codemagic environment group attached to this workflow."; exit 1
+          fi
+          case "$API_URL" in
             https://*) ;;
-            *) echo "EXPO_PUBLIC_WEATHERTRIP_API_URL must be an HTTPS Railway URL"; exit 1 ;;
+            *) echo "EXPO_PUBLIC_WEATHERTRIP_API_URL must be an HTTPS Railway URL (received a non-HTTPS value)"; exit 1 ;;
           esac
-          case "${EXPO_PUBLIC_WEATHERTRIP_API_URL:-}" in
-            https://localhost*|https://127.0.0.1*) echo "EXPO_PUBLIC_WEATHERTRIP_API_URL cannot point to localhost"; exit 1 ;;
+          case "$API_URL" in
+            https://localhost*|https://127.0.0.1*) echo "EXPO_PUBLIC_WEATHERTRIP_API_URL cannot point to localhost or 127.0.0.1"; exit 1 ;;
           esac
-          test -n "${EXPO_PUBLIC_SUPABASE_URL:-}" || { echo "EXPO_PUBLIC_SUPABASE_URL is missing"; exit 1; }
-          test -n "${EXPO_PUBLIC_SUPABASE_ANON_KEY:-}" || { echo "EXPO_PUBLIC_SUPABASE_ANON_KEY is missing"; exit 1; }
+          test -n "${EXPO_PUBLIC_SUPABASE_URL:-}" || { echo "EXPO_PUBLIC_SUPABASE_URL is missing from the Codemagic environment group"; exit 1; }
+          test -n "${EXPO_PUBLIC_SUPABASE_ANON_KEY:-}" || { echo "EXPO_PUBLIC_SUPABASE_ANON_KEY is missing from the Codemagic environment group"; exit 1; }
       - name: Prebuild iOS project
         script: |
           cd apps/mobile
