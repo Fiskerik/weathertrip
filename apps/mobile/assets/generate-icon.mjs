@@ -8,13 +8,30 @@ for (let y = 0; y < size; y += 1) {
   for (let x = 0; x < size; x += 1) setPixel(x, y, background);
 }
 
-circle(510, 400, 258, [229, 184, 75, 255]);
-ellipse(510, 690, 365, 175, [31, 122, 90, 255]);
-line(214, 590, 512, 467, 34, [23, 32, 28, 255]);
-line(512, 467, 765, 559, 34, [23, 32, 28, 255]);
-waypoint(214, 590);
-waypoint(512, 467);
-waypoint(765, 559);
+const yellow = [229, 184, 75, 255];
+const ink = [23, 32, 28, 255];
+const paper = [247, 244, 238, 255];
+
+line(680, 72, 680, 130, 28, yellow);
+line(470, 150, 510, 190, 28, yellow);
+line(890, 150, 850, 190, 28, yellow);
+line(960, 300, 902, 300, 28, yellow);
+circle(680, 300, 174, yellow);
+ellipse(512, 730, 405, 235, [31, 122, 90, 255]);
+
+polyline([
+  [150, 786],
+  [250, 700],
+  [365, 640],
+  [473, 628],
+  [570, 570],
+  [660, 505],
+  [750, 485],
+  [850, 465]
+], 38, ink);
+waypoint(150, 786);
+waypoint(473, 628);
+waypoint(750, 485);
 
 fs.writeFileSync(new URL("./icon.png", import.meta.url), PNG.sync.write(png));
 fs.writeFileSync(new URL("./splash.png", import.meta.url), PNG.sync.write(png));
@@ -50,7 +67,15 @@ function line(x1, y1, x2, y2, width, color) {
   }
 }
 
+function polyline(points, width, color) {
+  for (let index = 1; index < points.length; index += 1) {
+    const [x1, y1] = points[index - 1];
+    const [x2, y2] = points[index];
+    line(x1, y1, x2, y2, width, color);
+  }
+}
+
 function waypoint(x, y) {
-  circle(x, y, 31, [247, 244, 238, 255]);
+  circle(x, y, 36, paper);
   circle(x, y, 21, [50, 107, 143, 255]);
 }
