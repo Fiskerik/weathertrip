@@ -17,6 +17,9 @@ export function validateTripBrief(brief: TripBrief): ApiError | null {
   if (!Number.isFinite(brief.startLocation?.coordinates?.latitude) || !Number.isFinite(brief.startLocation?.coordinates?.longitude)) {
     details.push("Choose a start location from the suggestions so we can calculate a real route.");
   }
+  if (brief.endLocation?.label?.trim() && (!Number.isFinite(brief.endLocation.coordinates?.latitude) || !Number.isFinite(brief.endLocation.coordinates?.longitude))) {
+    details.push("Choose the end destination from the suggestions so we can calculate a real route.");
+  }
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
     details.push("Choose valid trip dates.");
   } else if (end < start) {
@@ -132,7 +135,15 @@ export function scoreForecast(forecast: DailyForecast[], goal: WeatherGoal): num
 export function summarizePlan(plan: TripPlan, brief: TripBrief): string {
   const stopText = `${plan.stops.length} ${plan.stops.length === 1 ? "place" : "places"}`;
   const countryText = plan.countries.join(", ");
-  return `${brief.durationDays} days, ${stopText} across ${countryText}, with ${Math.round(plan.totalDrivingMinutes / 60)} h of driving and the ${weatherGoalLabel(brief.weatherGoal)} forecast windows.`;
+  return `${brief.durationDays} days, ${stopText} across ${countryText}, with ${formatDurationMinutes(plan.totalDrivingMinutes)} of driving and the ${weatherGoalLabel(brief.weatherGoal)} forecast windows.`;
+}
+
+export function formatDurationMinutes(totalMinutes: number): string {
+  const minutes = Math.max(0, Math.round(totalMinutes));
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  if (!hours) return `${remainder}m`;
+  return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
 }
 
 export function buildPlanLeg(
@@ -162,7 +173,8 @@ export function buildPlanLeg(
     elapsedMinutes: drivingMinutes + breaks.reduce((sum, stop) => sum + stop.durationMinutes, 0),
     routePath,
     breaks,
-    source: "estimate"
+    source: "estimate",
+    isFinalSegment: true
   };
 }
 

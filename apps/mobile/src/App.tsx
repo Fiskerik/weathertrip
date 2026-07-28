@@ -5,6 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { Home, Map, UserRound } from "lucide-react-native";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ProfileScreen, PlanScreen, SavedTripScreen, TripsScreen } from "./screens";
 import { colors } from "./theme";
 
@@ -67,13 +68,15 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
 export default function App() {
   return (
     <AppErrorBoundary>
-      <NavigationContainer>
-        <StatusBar style="dark" />
-        <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.paper } }}>
-          <Stack.Screen name="Tabs" component={TabNavigator} />
-          <Stack.Screen name="SavedTrip" component={SavedTripScreen} />
-        </Stack.Navigator>
-      </NavigationContainer>
+      <SafeAreaProvider>
+        <NavigationContainer>
+          <StatusBar style="dark" />
+          <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.paper } }}>
+            <Stack.Screen name="Tabs" component={TabNavigator} />
+            <Stack.Screen name="SavedTrip" component={SavedTripScreen} />
+          </Stack.Navigator>
+        </NavigationContainer>
+      </SafeAreaProvider>
     </AppErrorBoundary>
   );
 }

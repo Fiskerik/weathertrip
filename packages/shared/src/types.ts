@@ -84,6 +84,12 @@ export type DailyForecast = {
   windKph: number;
 };
 
+export type HourlyForecast = {
+  time: string;
+  temperatureC: number;
+  weatherCode?: number;
+};
+
 export type TravelPlanStep = {
   title: string;
   detail: string;
@@ -189,6 +195,11 @@ export type TripBrief = {
     country?: string;
     coordinates: Coordinates;
   };
+  endLocation?: {
+    label: string;
+    country?: string;
+    coordinates: Coordinates;
+  };
   dateRange: {
     start: string;
     end: string;
@@ -229,6 +240,7 @@ export type PlanLeg = {
   routePath: Coordinates[];
   breaks: BreakStop[];
   source: "openrouteservice" | "estimate";
+  isFinalSegment: boolean;
 };
 
 export type PlanStop = {
@@ -239,6 +251,7 @@ export type PlanStop = {
   nights: number;
   sunshineHours: number;
   forecast: DailyForecast[];
+  hourlyForecast?: HourlyForecast[];
   why: string;
   accommodationSuggestions: AccommodationSuggestion[];
 };

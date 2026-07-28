@@ -53,7 +53,8 @@ import {
   View
 } from "react-native";
 import MapView, { Marker, Polyline, type Region } from "react-native-maps";
-import Svg, { Circle, Path, Rect } from "react-native-svg";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Circle, Path, Polyline as SvgPolyline, Rect } from "react-native-svg";
 import type {
   AccommodationTag,
   BorderRule,
@@ -65,7 +66,7 @@ import type {
   UserProfile,
   WeatherGoal
 } from "@weathertrip/shared";
-import { planningDestinations } from "@weathertrip/shared";
+import { formatDurationMinutes, planningDestinations } from "@weathertrip/shared";
 import type { RootStackParamList } from "./App";
 import {
   createSavedTrip,
@@ -97,20 +98,25 @@ const goalOptions: Array<{ id: WeatherGoal; label: string; detail: string; icon:
 ];
 
 const defaultStart = { label: "Stockholm", country: "Sweden", coordinates: { latitude: 59.3293, longitude: 18.0686 } };
+const invalidCoordinates = { latitude: Number.NaN, longitude: Number.NaN };
 
 export function PlanScreen() {
+  const insets = useSafeAreaInsets();
   const [brief, setBrief] = useState<TripBrief>(() => createBrief());
   const [result, setResult] = useState<PlanResponse | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<TripPlan | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [locationQuery, setLocationQuery] = useState(defaultStart.label);
+  const [endLocationQuery, setEndLocationQuery] = useState("");
+  const [locationTarget, setLocationTarget] = useState<"start" | "end" | null>(null);
+  const [endDestinationOpen, setEndDestinationOpen] = useState(false);
   const [showDates, setShowDates] = useState<"start" | "end" | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   const suggestions = useMemo(() => {
-    const query = locationQuery.trim().toLowerCase();
+    const query = (locationTarget === "end" ? endLocationQuery : locationTarget === "start" ? locationQuery : "").trim().toLowerCase();
     if (!query) return [];
     return planningDestinations.filter((destination) => `${destination.name} ${destination.country}`.toLowerCase().includes(query)).slice(0, 5);
   }, [locationQuery]);
@@ -142,6 +148,7 @@ export function PlanScreen() {
       const place = reverse[0];
       const label = place?.city ?? place?.district ?? "Current location";
       setLocationQuery(label);
+      setLocationTarget(null);
       setBrief((current) => ({
         ...current,
         startLocation: {
@@ -156,8 +163,14 @@ export function PlanScreen() {
   }
 
   function selectLocation(label: string, country: string, coordinates: { latitude: number; longitude: number }) {
-    setLocationQuery(label);
-    setBrief((current) => ({ ...current, startLocation: { label, country, coordinates } }));
+    if (locationTarget === "end") {
+      setEndLocationQuery(label);
+      setBrief((current) => ({ ...current, endLocation: { label, country, coordinates } }));
+    } else {
+      setLocationQuery(label);
+      setBrief((current) => ({ ...current, startLocation: { label, country, coordinates } }));
+    }
+    setLocationTarget(null);
   }
 
   async function savePlan() {
@@ -186,7 +199,7 @@ export function PlanScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.page, { paddingTop: insets.top + 12 }]} keyboardShouldPersistTaps="handled">
         <View style={styles.topBar}>
           <View>
             <Text style={styles.eyebrow}>WEATHERTRIP</Text>
@@ -204,8 +217,10 @@ export function PlanScreen() {
                 value={locationQuery}
                 onChangeText={(value) => {
                   setLocationQuery(value);
-                  setBrief((current) => ({ ...current, startLocation: { ...current.startLocation, label: value } }));
+                  setLocationTarget("start");
+                  setBrief((current) => ({ ...current, startLocation: { label: value, coordinates: invalidCoordinates } }));
                 }}
+                onFocus={() => setLocationTarget("start")}
                 placeholder="Start city"
                 placeholderTextColor={colors.muted}
                 style={styles.locationInput}
@@ -216,6 +231,30 @@ export function PlanScreen() {
               <Compass size={19} color={colors.green} />
             </Pressable>
           </View>
+          {endDestinationOpen ? <View style={styles.endLocationWrap}>
+            <Text style={styles.controlLabel}>End destination (optional)</Text>
+            <View style={styles.locationLine}>
+              <View style={styles.locationInputWrap}>
+                <MapPinned size={18} color={colors.blue} />
+                <TextInput
+                  value={endLocationQuery}
+                  onChangeText={(value) => {
+                    setEndLocationQuery(value);
+                    setLocationTarget("end");
+                    setBrief((current) => value.trim() ? ({ ...current, endLocation: { label: value, coordinates: invalidCoordinates } }) : ({ ...current, endLocation: undefined }));
+                  }}
+                  onFocus={() => setLocationTarget("end")}
+                  placeholder="Finish in a city"
+                  placeholderTextColor={colors.muted}
+                  style={styles.locationInput}
+                  accessibilityLabel="End destination"
+                />
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Remove end destination" style={styles.iconButton} onPress={() => { setEndLocationQuery(""); setEndDestinationOpen(false); setLocationTarget(null); setBrief((current) => ({ ...current, endLocation: undefined })); }}>
+                <Minus size={19} color={colors.green} />
+              </Pressable>
+            </View>
+          </View> : <Pressable accessibilityRole="button" style={styles.addEndButton} onPress={() => { setEndDestinationOpen(true); setLocationTarget("end"); }}><MapPinned size={16} color={colors.blue} /><Text style={styles.addEndText}>Add end destination</Text></Pressable>}
           {suggestions.length ? (
             <View style={styles.suggestions}>
               {suggestions.map((suggestion) => (
@@ -228,8 +267,9 @@ export function PlanScreen() {
           ) : null}
           <View style={styles.dateLine}>
             <DateButton label="Leave" value={brief.dateRange.start} onPress={() => setShowDates("start")} />
-            <DateButton label="Back" value={brief.dateRange.end} onPress={() => setShowDates("end")} />
+            <DateButton label={brief.endLocation ? "Arrive" : "Return"} value={brief.dateRange.end} onPress={() => setShowDates("end")} />
           </View>
+          {showDates ? <View style={styles.datePickerWrap}><DateTimePicker value={parseDate(showDates === "start" ? brief.dateRange.start : brief.dateRange.end)} mode="date" display={Platform.OS === "ios" ? "spinner" : "default"} minimumDate={showDates === "end" ? parseDate(brief.dateRange.start) : undefined} onChange={(event, date) => onDateChange(event, date, showDates, brief, setBrief, setShowDates)} />{Platform.OS === "ios" ? <Pressable accessibilityRole="button" style={styles.dateDoneButton} onPress={() => setShowDates(null)}><Text style={styles.dateDoneText}>Done</Text></Pressable> : null}</View> : null}
           <View style={styles.durationLine}><Text style={styles.muted}>Trip length</Text><Text style={styles.strong}>{brief.durationDays} days</Text></View>
         </View>
 
@@ -243,7 +283,7 @@ export function PlanScreen() {
         <View style={styles.section}>
           <SectionHeading icon={Car} label="How should the route feel?" />
           <Text style={styles.controlLabel}>Maximum driving per day</Text>
-          <ChoiceRow values={[4, 6, 8]} selected={brief.maxDriveHoursPerDay} suffix=" h" onSelect={(value) => setBrief((current) => ({ ...current, maxDriveHoursPerDay: value }))} />
+          <DrivingHoursControl value={brief.maxDriveHoursPerDay} onChange={(value) => setBrief((current) => ({ ...current, maxDriveHoursPerDay: value }))} />
           <Text style={styles.controlLabel}>Places to discover</Text>
           <ChoiceRow values={["smart", 1, 2, 3, 4]} selected={brief.placeCount} labels={{ smart: "Smart" }} onSelect={(value) => setBrief((current) => ({ ...current, placeCount: value as TripBrief["placeCount"] }))} />
           <Text style={styles.controlLabel}>Borders</Text>
@@ -259,20 +299,20 @@ export function PlanScreen() {
           {advancedOpen ? <AdvancedEditor brief={brief} setBrief={setBrief} /> : null}
         </View>
 
-        {showDates ? <DateTimePicker value={parseDate(showDates === "start" ? brief.dateRange.start : brief.dateRange.end)} mode="date" minimumDate={showDates === "end" ? parseDate(brief.dateRange.start) : undefined} onChange={(event, date) => onDateChange(event, date, showDates, brief, setBrief, setShowDates)} /> : null}
         {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
 
         <Pressable accessibilityRole="button" style={[styles.primaryButton, loading && styles.disabled]} disabled={loading} onPress={generate}>
           {loading ? <ActivityIndicator color={colors.surface} /> : <><Route size={20} color={colors.surface} /><Text style={styles.primaryText}>Find my route</Text></>}
         </Pressable>
 
-        {selectedPlan ? <PlanResult plan={selectedPlan} alternatives={(result ? [result.primaryPlan, ...result.alternatives] : []).filter((candidate) => candidate.id !== selectedPlan.id)} onSelect={setSelectedPlan} onSave={savePlan} saved={saved} /> : null}
+        {selectedPlan ? <PlanResultV2 plan={selectedPlan} alternatives={(result ? [result.primaryPlan, ...result.alternatives] : []).filter((candidate) => candidate.id !== selectedPlan.id)} onSelect={setSelectedPlan} onSave={savePlan} saved={saved} /> : null}
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 export function TripsScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const [trips, setTrips] = useState<SavedTrip[]>([]);
   const [loading, setLoading] = useState(true);
@@ -298,7 +338,7 @@ export function TripsScreen() {
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
   return (
-    <ScrollView contentContainerStyle={styles.page}>
+    <ScrollView contentContainerStyle={[styles.page, { paddingTop: insets.top + 12 }]}>
       <ScreenHeader title="Saved trips" subtitle="Your plans, ready when you are." />
       {loading ? <ActivityIndicator color={colors.green} /> : null}
       {!loading && !trips.length ? <EmptyState icon={MapPinned} title="No saved trips yet" detail="Build a route on Plan and tap Save when it feels right." /> : null}
@@ -312,6 +352,7 @@ export function TripsScreen() {
 }
 
 export function SavedTripScreen({ route, navigation }: { route: { params: { tripId: string } }; navigation: NavigationProp<RootStackParamList> }) {
+  const insets = useSafeAreaInsets();
   const [trip, setTrip] = useState<SavedTrip | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -344,10 +385,11 @@ export function SavedTripScreen({ route, navigation }: { route: { params: { trip
   }
 
   if (!trip) return <View style={styles.center}><ActivityIndicator color={colors.green} />{error ? <Text style={styles.errorText}>{error}</Text> : null}</View>;
-  return <ScrollView contentContainerStyle={styles.page}><Pressable style={styles.backButton} onPress={() => navigation.goBack()}><ArrowLeft size={19} color={colors.ink} /><Text style={styles.backText}>Saved trips</Text></Pressable><ScreenHeader title={trip.title} subtitle={`${trip.brief.dateRange.start} - ${trip.brief.dateRange.end}`} /><PlanResult plan={trip.plan} alternatives={[]} onSelect={() => undefined} onSave={() => undefined} saved /><View style={styles.actionRow}><ActionButton icon={Edit3} label="Rename" onPress={rename} /><ActionButton icon={Trash2} label="Delete" tone="danger" onPress={remove} /></View></ScrollView>;
+  return <ScrollView contentContainerStyle={[styles.page, { paddingTop: insets.top + 12 }]}><Pressable style={styles.backButton} onPress={() => navigation.goBack()}><ArrowLeft size={19} color={colors.ink} /><Text style={styles.backText}>Saved trips</Text></Pressable><ScreenHeader title={trip.title} subtitle={`${formatDate(trip.brief.dateRange.start)} - ${formatDate(trip.brief.dateRange.end)}`} /><PlanResultV2 plan={trip.plan} alternatives={[]} onSelect={() => undefined} onSave={() => undefined} saved /><View style={styles.actionRow}><ActionButton icon={Edit3} label="Rename" onPress={rename} /><ActionButton icon={Trash2} label="Delete" tone="danger" onPress={remove} /></View></ScrollView>;
 }
 
 export function ProfileScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const [sessionEmail, setSessionEmail] = useState<string | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -395,7 +437,7 @@ export function ProfileScreen() {
     Alert.alert("Delete account?", "This removes your cloud profile and saved trips.", [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: async () => { try { await deleteProfile(); await supabase.auth.signOut(); setProfile(null); setSessionEmail(null); } catch { setMessage("Could not delete the account."); } } }]);
   }
 
-  return <ScrollView contentContainerStyle={styles.page}><ScreenHeader title="Profile" subtitle="Defaults that make planning faster." />
+  return <ScrollView contentContainerStyle={[styles.page, { paddingTop: insets.top + 12 }]}><ScreenHeader title="Profile" subtitle="Defaults that make planning faster." />
     {!sessionEmail ? <View style={styles.signInPanel}><View style={styles.avatar}><UserRound size={23} color={colors.green} /></View><Text style={styles.panelTitle}>Save plans across devices</Text><Text style={styles.panelText}>You can plan and save locally without an account. Sign in when you want cloud sync.</Text>{appleAvailable ? <AppleAuthentication.AppleAuthenticationButton buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE} buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK} cornerRadius={10} style={styles.appleButton} onPress={signInApple} /> : null}<TextInput value={email} onChangeText={setEmail} placeholder="Email address" placeholderTextColor={colors.muted} autoCapitalize="none" keyboardType="email-address" style={styles.textInput} /><Pressable style={styles.secondaryButton} onPress={signInEmail}><Text style={styles.secondaryText}>Email me a sign-in link</Text></Pressable></View> : <View style={styles.profileHeader}><View style={styles.avatar}><ShieldCheck size={23} color={colors.green} /></View><View><Text style={styles.panelTitle}>Signed in</Text><Text style={styles.muted}>{sessionEmail}</Text></View></View>}
     {profile ? <View style={styles.section}><SectionHeading icon={Settings2} label="Planning defaults" /><SettingStepper label="Adults" value={profile.defaultAdults} min={1} max={8} onChange={(value) => void saveSettings({ defaultAdults: value })} /><SettingStepper label="Children" value={profile.defaultChildren} min={0} max={8} onChange={(value) => void saveSettings({ defaultChildren: value })} /><SettingStepper label="Driving limit" value={profile.defaultMaxDriveHours} min={2} max={10} suffix=" h" onChange={(value) => void saveSettings({ defaultMaxDriveHours: value })} /><View style={styles.settingRow}><Text style={styles.settingLabel}>Electric car</Text><Switch value={profile.defaultHasEv} onValueChange={(value) => void saveSettings({ defaultHasEv: value })} trackColor={{ false: colors.line, true: colors.greenSoft }} thumbColor={profile.defaultHasEv ? colors.green : colors.muted} /></View><Text style={styles.controlLabel}>Units</Text><ChoiceRow values={["metric", "imperial"]} selected={profile.units} labels={{ metric: "Metric", imperial: "Imperial" }} onSelect={(value) => void saveSettings({ units: value as UserProfile["units"] })} /></View> : null}
     {message ? <Text style={styles.statusText}>{message}</Text> : null}
@@ -415,14 +457,53 @@ function PlanResult({ plan, alternatives, onSelect, onSave, saved }: { plan: Tri
   </View>;
 }
 
-function LegBlock({ leg }: { leg: TripPlan["legs"][number] }) { return <View style={styles.legBlock}><View style={styles.legHeader}><Route size={16} color={colors.blue} /><Text style={styles.legTitle}>Day {leg.day}: {leg.fromName} to {leg.toName}</Text><Text style={styles.legTime}>{Math.round(leg.drivingMinutes / 60 * 10) / 10} h</Text></View>{leg.breaks.map((stop) => <View key={stop.id} style={styles.breakLine}><View style={[styles.breakIcon, stop.kind === "lunch" && styles.lunchIcon]}><Text style={styles.breakIconText}>{stop.kind === "lunch" ? "L" : stop.kind === "charging" ? "E" : "15"}</Text></View><View style={styles.flex}><Text style={styles.breakTitle}>{stop.title}</Text><Text style={styles.breakText}>{stop.detail}</Text></View></View>)}</View>; }
+function PlanResultV2({ plan, alternatives, onSelect, onSave, saved }: { plan: TripPlan; alternatives: TripPlan[]; onSelect: (plan: TripPlan) => void; onSave: () => void; saved: boolean }) {
+  const allPlans = [plan, ...alternatives];
+  const region: Region = { latitude: plan.stops[0]?.destination.coordinates.latitude ?? 59.33, longitude: plan.stops[0]?.destination.coordinates.longitude ?? 18.07, latitudeDelta: 12, longitudeDelta: 12 };
+  const routeCoordinates = plan.legs.flatMap((leg) => leg.routePath);
+  const stopsByName = new Map(plan.stops.map((stop) => [stop.destination.name, stop]));
+  return <View style={styles.results}>
+    <View style={styles.resultHeader}><View style={styles.flex}><Text style={styles.resultEyebrow}>BEST ROUTE {"\u00b7"} {plan.score}/100 FIT</Text><Text style={styles.resultTitle}>{plan.title}</Text><Text style={styles.resultSummary}>{plan.summary}</Text></View><Pressable accessibilityLabel={saved ? "Trip saved" : "Save trip"} style={[styles.saveButton, saved && styles.saveButtonActive]} onPress={onSave}><Save size={18} color={saved ? colors.surface : colors.green} /></Pressable></View>
+    <MapView style={styles.map} initialRegion={region} scrollEnabled={false} zoomEnabled={false} accessibilityLabel="Trip route map"><Polyline coordinates={routeCoordinates} strokeColor={colors.green} strokeWidth={4} />{plan.stops.map((stop, index) => <Marker key={stop.id} coordinate={stop.destination.coordinates} title={`${index + 1}. ${stop.destination.name}`} description={`${stop.nights} nights`}><View style={styles.marker}><Text style={styles.markerText}>{index + 1}</Text></View></Marker>)}</MapView>
+    {alternatives.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.alternativeRow}>{allPlans.map((alternative, index) => <Pressable key={alternative.id} style={[styles.alternative, alternative.id === plan.id && styles.alternativeActive]} onPress={() => onSelect(alternative)}><Text style={styles.alternativeLabel}>{index === 0 ? "Best fit" : `Option ${index + 1}`}</Text><Text style={styles.alternativeTitle}>{alternative.stops.map((stop) => stop.destination.name).join(" \u00b7 ")}</Text><Text style={styles.alternativeMeta}>{alternative.score}/100 {"\u00b7"} {formatDurationMinutes(alternative.totalDrivingMinutes)} driving</Text></Pressable>)}</ScrollView> : null}
+    <View style={styles.metricRow}><Metric icon={Sun} label="Weather" value={`${plan.score}/100`} /><Metric icon={MapPinned} label="Places" value={String(plan.stops.length)} /><Metric icon={Car} label="Driving" value={formatDurationMinutes(plan.totalDrivingMinutes)} /></View>
+    <View style={styles.itinerary}>{plan.legs.sort((left, right) => left.day - right.day).map((leg) => <React.Fragment key={leg.id}><LegBlockV2 leg={leg} />{leg.isFinalSegment && stopsByName.has(leg.toName) ? <ItineraryStop stop={stopsByName.get(leg.toName)!} index={plan.stops.findIndex((stop) => stop.destination.name === leg.toName) + 1} /> : null}</React.Fragment>)}</View>
+  </View>;
+}
+
+function ItineraryStop({ stop, index }: { stop: TripPlan["stops"][number]; index: number }) {
+  return <View style={styles.stopBlock}><View style={styles.stopRail}><View style={styles.stopDot}><Text style={styles.stopNumber}>{index}</Text></View></View><View style={styles.stopContent}><Text style={styles.stopDates}>{formatDate(stop.arrivalDate)} {"\u00b7"} {stop.nights} {stop.nights === 1 ? "night" : "nights"}</Text><Text style={styles.stopTitle}>{stop.destination.name}</Text><Text style={styles.stopMeta}>{stop.destination.country} {"\u00b7"} {stop.sunshineHours} h average sun</Text><Text style={styles.stopWhy}>{stop.why}</Text><WeatherDisclosure stop={stop} /></View></View>;
+}
+
+function WeatherDisclosure({ stop }: { stop: TripPlan["stops"][number] }) {
+  const [open, setOpen] = useState(false);
+  const today = stop.forecast[0];
+  return <View style={styles.weatherDisclosure}><Pressable accessibilityRole="button" accessibilityLabel={`Show hourly weather for ${stop.destination.name}`} accessibilityState={{ expanded: open }} style={styles.weatherTrigger} onPress={() => setOpen((current) => !current)}><View style={styles.weatherSunButton}><Sun size={18} color={colors.yellow} /></View><View style={styles.flex}><Text style={styles.weatherTriggerTitle}>Weather</Text><Text style={styles.weatherTriggerMeta}>{today ? `${formatDate(today.date)} ${"\u00b7"} ${today.sunshineHours} h sun` : "Forecast"}</Text></View><ChevronDown size={18} color={colors.muted} style={open ? styles.rotated : undefined} /></Pressable>{open ? <HourlyTemperatureTrend hourly={stop.hourlyForecast ?? []} fallback={today} /> : null}</View>;
+}
+
+function HourlyTemperatureTrend({ hourly, fallback }: { hourly: NonNullable<TripPlan["stops"][number]["hourlyForecast"]>; fallback?: TripPlan["stops"][number]["forecast"][number] }) {
+  const forecast = hourly.slice(0, 24);
+  const points = forecast.length ? forecast : fallback ? [{ time: `${fallback.date}T06:00`, temperatureC: fallback.tempMinC }, { time: `${fallback.date}T15:00`, temperatureC: fallback.tempMaxC }, { time: `${fallback.date}T22:00`, temperatureC: fallback.tempMinC }] : [];
+  if (!points.length) return <Text style={styles.weatherUnavailable}>Hourly weather is not available for this stay yet.</Text>;
+  const temperatures = points.map((point) => point.temperatureC);
+  const minimum = Math.min(...temperatures);
+  const maximum = Math.max(...temperatures);
+  const range = Math.max(1, maximum - minimum);
+  const chartPoints = points.map((point, index) => `${16 + index / Math.max(1, points.length - 1) * 248},${70 - (point.temperatureC - minimum) / range * 48}`).join(" ");
+  return <View style={styles.weatherChart}><View style={styles.weatherRange}><Text style={styles.weatherRangeText}>{Math.round(minimum)} degrees</Text><Text style={styles.weatherRangeText}>{Math.round(maximum)} degrees</Text></View><Svg width="100%" height={82} viewBox="0 0 280 82" preserveAspectRatio="none"><Path d="M16 70H264" stroke={colors.line} strokeWidth="1" /><SvgPolyline points={chartPoints} fill="none" stroke={colors.yellow} strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" /></Svg><View style={styles.hourLabels}>{points.filter((_point, index) => index === 0 || index === points.length - 1 || index % 6 === 0).map((point) => <Text key={point.time} style={styles.hourLabel}>{point.time.slice(11, 16)}</Text>)}</View></View>;
+}
+
+function LegBlockV2({ leg }: { leg: TripPlan["legs"][number] }) { return <View style={styles.legBlock}><View style={styles.legHeader}><Route size={16} color={colors.blue} /><View style={styles.flex}><Text style={styles.legTitle}>Day {leg.day}: {leg.fromName} to {leg.toName}</Text><Text style={styles.legSubtext}>{formatDurationMinutes(leg.drivingMinutes)} driving {leg.elapsedMinutes > leg.drivingMinutes ? `, ${formatDurationMinutes(leg.elapsedMinutes)} including breaks` : ""}</Text></View><Text style={styles.legTime}>{formatDurationMinutes(leg.drivingMinutes)}</Text></View>{leg.breaks.map((stop) => <View key={stop.id} style={styles.breakLine}><View style={[styles.breakIcon, stop.kind === "lunch" && styles.lunchIcon]}><Text style={styles.breakIconText}>{stop.kind === "lunch" ? "L" : stop.kind === "charging" ? "E" : "15"}</Text></View><View style={styles.flex}><Text style={styles.breakTitle}>{stop.title}</Text><Text style={styles.breakText}>{stop.detail}</Text></View></View>)}</View>; }
+
+function LegBlock({ leg }: { leg: TripPlan["legs"][number] }) { return <LegBlockV2 leg={leg} />; }
 
 function AdvancedEditor({ brief, setBrief }: { brief: TripBrief; setBrief: React.Dispatch<React.SetStateAction<TripBrief>> }) { return <View style={styles.advancedContent}><Text style={styles.controlLabel}>Travelers</Text><SettingStepper label="Adults" value={brief.travelers.adults} min={1} max={8} onChange={(value) => setBrief((current) => ({ ...current, travelers: { ...current.travelers, adults: value } }))} /><SettingStepper label="Children" value={brief.travelers.children} min={0} max={8} onChange={(value) => setBrief((current) => ({ ...current, travelers: { ...current.travelers, children: value } }))} /><View style={styles.settingRow}><Text style={styles.settingLabel}>Electric car</Text><Switch value={brief.travelers.hasEv} onValueChange={(value) => setBrief((current) => ({ ...current, travelers: { ...current.travelers, hasEv: value } }))} trackColor={{ false: colors.line, true: colors.greenSoft }} thumbColor={brief.travelers.hasEv ? colors.green : colors.muted} /></View><Text style={styles.controlLabel}>Stay style</Text><View style={styles.chipWrap}>{accommodationOptions.map((option) => { const active = brief.accommodations.includes(option.id); const Icon = option.icon; return <Pressable key={option.id} style={[styles.smallChoice, active && styles.smallChoiceActive]} onPress={() => setBrief((current) => ({ ...current, accommodations: active ? current.accommodations.filter((item) => item !== option.id) : [...current.accommodations, option.id] }))}><Icon size={16} color={active ? colors.surface : colors.muted} /><Text style={[styles.smallChoiceText, active && styles.smallChoiceTextActive]}>{option.label}</Text>{active ? <Check size={14} color={colors.surface} /> : null}</Pressable>; })}</View><Text style={styles.controlLabel}>Temperature comfort</Text><ChoiceRow values={["cool", "mild", "warm"]} selected={brief.temperatureComfort ?? "mild"} labels={{ cool: "Cool", mild: "Mild", warm: "Warm" }} onSelect={(value) => setBrief((current) => ({ ...current, temperatureComfort: value as TemperatureComfort }))} /></View>; }
 
 function SectionHeading({ icon: Icon, label }: { icon: LucideIcon; label: string }) { return <View style={styles.sectionHeading}><Icon size={19} color={colors.green} /><Text style={styles.sectionTitle}>{label}</Text></View>; }
 function ScreenHeader({ title, subtitle }: { title: string; subtitle: string }) { return <View style={styles.screenHeader}><View style={styles.screenBrand}><BrandMark size={34} /><Text style={styles.eyebrow}>WEATHERTRIP</Text></View><Text style={styles.screenTitle}>{title}</Text><Text style={styles.screenSubtitle}>{subtitle}</Text></View>; }
 function BrandMark({ size = 58 }: { size?: number }) { return <View accessibilityLabel="Weathertrip logo" style={[styles.brandMark, { height: size, width: size, borderRadius: size * 0.21 }]}><Svg height={size} width={size} viewBox="0 0 1024 1024"><Rect width="1024" height="1024" rx="220" fill={colors.paper} /><Circle cx="680" cy="300" r="174" fill={colors.yellow} /><Path d="M110 742c118-124 246-181 383-161 129 19 171 101 280 53 54-24 99-60 141-107v387H110z" fill={colors.green} /><Path d="M150 786c115-108 216-159 323-158 119 1 169-104 277-143 52-19 105-21 152-8" fill="none" stroke={colors.ink} strokeLinecap="round" strokeLinejoin="round" strokeWidth="38" /><Circle cx="150" cy="786" r="29" fill={colors.blue} stroke={colors.paper} strokeWidth="14" /><Circle cx="473" cy="628" r="29" fill={colors.blue} stroke={colors.paper} strokeWidth="14" /><Circle cx="750" cy="485" r="29" fill={colors.blue} stroke={colors.paper} strokeWidth="14" /></Svg></View>; }
-function DateButton({ label, value, onPress }: { label: string; value: string; onPress: () => void }) { return <Pressable style={styles.dateButton} onPress={onPress}><Text style={styles.dateLabel}>{label}</Text><Text style={styles.dateValue}>{value}</Text></Pressable>; }
+function DateButton({ label, value, onPress }: { label: string; value: string; onPress: () => void }) { return <Pressable accessibilityRole="button" style={styles.dateButton} onPress={onPress}><Text style={styles.dateLabel}>{label}</Text><Text style={styles.dateValue}>{formatDate(value)}</Text></Pressable>; }
+function DrivingHoursControl({ value, onChange }: { value: number; onChange: (value: number) => void }) { const [input, setInput] = useState(String(value)); useEffect(() => setInput(String(value)), [value]); return <View><ChoiceRow values={[4, 6, 8]} selected={value} suffix=" h" onSelect={onChange} /><View style={styles.customDriveRow}><Text style={styles.customDriveLabel}>Custom limit</Text><TextInput value={input} onChangeText={(next) => { setInput(next); const parsed = Number(next); if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 10) onChange(parsed); }} onBlur={() => setInput(String(value))} keyboardType="decimal-pad" maxLength={4} style={styles.customDriveInput} accessibilityLabel="Custom maximum driving hours per day" /><Text style={styles.customDriveUnit}>hours</Text></View></View>; }
 function ChoiceTile({ selected, icon: Icon, label, detail, onPress }: { selected: boolean; icon: LucideIcon; label: string; detail: string; onPress: () => void }) { return <Pressable accessibilityRole="radio" accessibilityState={{ checked: selected }} style={[styles.goalTile, selected && styles.goalTileActive]} onPress={onPress}><View style={[styles.goalIcon, selected && styles.goalIconActive]}><Icon size={20} color={selected ? colors.surface : colors.green} /></View><Text style={[styles.goalLabel, selected && styles.goalLabelActive]}>{label}</Text><Text style={[styles.goalDetail, selected && styles.goalDetailActive]}>{detail}</Text>{selected ? <View style={styles.check}><Check size={13} color={colors.surface} /></View> : null}</Pressable>; }
 function ChoiceRow<T extends string | number>({ values, selected, suffix = "", labels, onSelect }: { values: T[]; selected: T; suffix?: string; labels?: Record<string, string>; onSelect: (value: T) => void }) { return <View style={styles.choiceRow}>{values.map((value) => { const active = value === selected; const label = labels?.[String(value)] ?? `${value}${suffix}`; return <Pressable key={String(value)} accessibilityRole="radio" accessibilityState={{ checked: active }} style={[styles.choice, active && styles.choiceActive]} onPress={() => onSelect(value)}><Text style={[styles.choiceText, active && styles.choiceTextActive]}>{label}</Text>{active ? <Check size={14} color={colors.surface} /> : null}</Pressable>; })}</View>; }
 function SettingStepper({ label, value, min, max, suffix = "", onChange }: { label: string; value: number; min: number; max: number; suffix?: string; onChange: (value: number) => void }) { return <View style={styles.settingRow}><Text style={styles.settingLabel}>{label}</Text><View style={styles.stepper}><Pressable accessibilityLabel={`Decrease ${label}`} style={styles.stepButton} onPress={() => onChange(Math.max(min, value - 1))}><Minus size={16} color={colors.ink} /></Pressable><Text style={styles.stepValue}>{value}{suffix}</Text><Pressable accessibilityLabel={`Increase ${label}`} style={styles.stepButton} onPress={() => onChange(Math.min(max, value + 1))}><Plus size={16} color={colors.ink} /></Pressable></View></View>; }
@@ -434,7 +515,8 @@ function createBrief(): TripBrief { const start = new Date(); start.setDate(star
 function defaultProfile(email: string): UserProfile { const now = new Date().toISOString(); return { id: "", email, units: "metric", defaultAdults: 2, defaultChildren: 0, defaultHasEv: false, defaultMaxDriveHours: 6, createdAt: now, updatedAt: now }; }
 function parseDate(value: string): Date { return new Date(`${value}T12:00:00`); }
 function toDateInput(value: Date): string { return value.toISOString().slice(0, 10); }
-function onDateChange(event: DateTimePickerEvent, date: Date | undefined, field: "start" | "end", brief: TripBrief, setBrief: React.Dispatch<React.SetStateAction<TripBrief>>, setShowDates: (value: "start" | "end" | null) => void) { if (event.type === "dismissed" || !date) { setShowDates(null); return; } const value = toDateInput(date); const range = { ...brief.dateRange, [field]: value }; setBrief((current) => ({ ...current, dateRange: range, durationDays: Math.max(1, Math.round((parseDate(range.end).getTime() - parseDate(range.start).getTime()) / 86_400_000) + 1) })); setShowDates(null); }
+function formatDate(value: string): string { const date = parseDate(value); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date); }
+function onDateChange(event: DateTimePickerEvent, date: Date | undefined, field: "start" | "end", brief: TripBrief, setBrief: React.Dispatch<React.SetStateAction<TripBrief>>, setShowDates: (value: "start" | "end" | null) => void) { if (event.type === "dismissed" || !date) { setShowDates(null); return; } const value = toDateInput(date); const range = { ...brief.dateRange, [field]: value }; setBrief((current) => ({ ...current, dateRange: range, durationDays: Math.max(1, Math.round((parseDate(range.end).getTime() - parseDate(range.start).getTime()) / 86_400_000) + 1) })); if (Platform.OS !== "ios") setShowDates(null); }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
@@ -453,10 +535,16 @@ const styles = StyleSheet.create({
   suggestions: { backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 10, borderWidth: 1, marginTop: 5, overflow: "hidden" },
   suggestion: { alignItems: "center", borderBottomColor: colors.line, borderBottomWidth: 1, flexDirection: "row", gap: 8, minHeight: 44, paddingHorizontal: 12 },
   suggestionText: { color: colors.ink, fontSize: 14, fontWeight: "700" },
+  endLocationWrap: { marginTop: 12 },
+  addEndButton: { alignItems: "center", alignSelf: "flex-start", flexDirection: "row", gap: 7, marginTop: 12, minHeight: 36 },
+  addEndText: { color: colors.blue, fontSize: 13, fontWeight: "800" },
   dateLine: { flexDirection: "row", gap: 10, marginTop: 12 },
   dateButton: { backgroundColor: colors.paper, borderColor: colors.line, borderRadius: 11, borderWidth: 1, flex: 1, minHeight: 64, padding: 11 },
   dateLabel: { color: colors.muted, fontSize: 12, fontWeight: "800", marginBottom: 5 },
   dateValue: { color: colors.ink, fontSize: 16, fontWeight: "800" },
+  datePickerWrap: { alignItems: "flex-end", backgroundColor: colors.paper, borderColor: colors.line, borderRadius: 11, borderWidth: 1, marginTop: 10, overflow: "hidden" },
+  dateDoneButton: { minHeight: 40, paddingHorizontal: 16, justifyContent: "center" },
+  dateDoneText: { color: colors.blue, fontSize: 15, fontWeight: "900" },
   durationLine: { alignItems: "center", borderTopColor: colors.line, borderTopWidth: 1, flexDirection: "row", justifyContent: "space-between", marginTop: 12, paddingTop: 12 },
   muted: { color: colors.muted, fontSize: 14, fontWeight: "700" },
   strong: { color: colors.ink, fontSize: 16, fontWeight: "900" },
@@ -476,13 +564,17 @@ const styles = StyleSheet.create({
   choiceActive: { backgroundColor: colors.green, borderColor: colors.green },
   choiceText: { color: colors.muted, fontSize: 14, fontWeight: "800" },
   choiceTextActive: { color: colors.surface },
+  customDriveRow: { alignItems: "center", flexDirection: "row", gap: 8, marginBottom: 3 },
+  customDriveLabel: { color: colors.muted, fontSize: 13, fontWeight: "700" },
+  customDriveInput: { backgroundColor: colors.paper, borderColor: colors.line, borderRadius: 9, borderWidth: 1, color: colors.ink, fontSize: 15, fontWeight: "900", height: 42, paddingHorizontal: 10, textAlign: "center", width: 58 },
+  customDriveUnit: { color: colors.muted, fontSize: 13, fontWeight: "700" },
   advancedHeader: { alignItems: "center", flexDirection: "row", gap: 10, minHeight: 44 },
   advancedIcon: { alignItems: "center", backgroundColor: colors.blueSoft, borderRadius: 10, height: 38, justifyContent: "center", width: 38 },
   advancedTitle: { color: colors.ink, fontSize: 17, fontWeight: "900" },
   advancedSummary: { color: colors.muted, fontSize: 12, fontWeight: "600", marginTop: 2 },
   rotated: { transform: [{ rotate: "180deg" }] },
   advancedContent: { borderTopColor: colors.line, borderTopWidth: 1, marginTop: 14, paddingTop: 13 },
-  settingRow: { alignItems: "center", borderBottomColor: colors.line, borderBottomWidth: 1, flexDirection: "row", justifyContent: "space-between", minHeight: 52 },
+  settingRow: { alignItems: "center", borderBottomColor: colors.line, borderBottomWidth: 1, flexDirection: "row", justifyContent: "space-between", minHeight: 58, paddingVertical: 4 },
   settingLabel: { color: colors.ink, fontSize: 15, fontWeight: "800" },
   stepper: { alignItems: "center", flexDirection: "row", gap: 8 },
   stepButton: { alignItems: "center", backgroundColor: colors.paper, borderColor: colors.line, borderRadius: 9, borderWidth: 1, height: 38, justifyContent: "center", width: 38 },
@@ -533,6 +625,7 @@ const styles = StyleSheet.create({
   legBlock: { backgroundColor: colors.blueSoft, borderRadius: 10, marginTop: 10, padding: 10 },
   legHeader: { alignItems: "center", flexDirection: "row", gap: 6 },
   legTitle: { color: colors.blue, flex: 1, fontSize: 12, fontWeight: "900" },
+  legSubtext: { color: colors.blue, fontSize: 11, fontWeight: "700", lineHeight: 16, marginTop: 2 },
   legTime: { color: colors.blue, fontSize: 12, fontWeight: "900" },
   breakLine: { alignItems: "center", flexDirection: "row", gap: 8, marginTop: 9 },
   breakIcon: { alignItems: "center", backgroundColor: colors.surface, borderRadius: 7, height: 27, justifyContent: "center", width: 32 },
@@ -540,6 +633,18 @@ const styles = StyleSheet.create({
   breakIconText: { color: colors.ink, fontSize: 10, fontWeight: "900" },
   breakTitle: { color: colors.ink, fontSize: 12, fontWeight: "900" },
   breakText: { color: colors.muted, fontSize: 11, fontWeight: "600", marginTop: 2 },
+  itinerary: { gap: 12 },
+  weatherDisclosure: { backgroundColor: colors.paper, borderColor: colors.line, borderRadius: 10, borderWidth: 1, marginTop: 10, overflow: "hidden" },
+  weatherTrigger: { alignItems: "center", flexDirection: "row", gap: 9, minHeight: 48, paddingHorizontal: 10 },
+  weatherSunButton: { alignItems: "center", backgroundColor: "#fff3c9", borderRadius: 15, height: 30, justifyContent: "center", width: 30 },
+  weatherTriggerTitle: { color: colors.ink, fontSize: 12, fontWeight: "900" },
+  weatherTriggerMeta: { color: colors.muted, fontSize: 11, fontWeight: "700", marginTop: 1 },
+  weatherChart: { borderTopColor: colors.line, borderTopWidth: 1, padding: 10 },
+  weatherRange: { flexDirection: "row", justifyContent: "space-between" },
+  weatherRangeText: { color: colors.muted, fontSize: 11, fontWeight: "800" },
+  hourLabels: { flexDirection: "row", justifyContent: "space-between", marginTop: 2 },
+  hourLabel: { color: colors.muted, fontSize: 10, fontWeight: "700" },
+  weatherUnavailable: { color: colors.muted, fontSize: 12, fontWeight: "700", padding: 10 },
   screenHeader: { paddingBottom: 4, paddingTop: 8 },
   screenBrand: { alignItems: "center", flexDirection: "row", gap: 8 },
   screenTitle: { color: colors.ink, fontSize: 28, fontWeight: "900", marginTop: 4 },

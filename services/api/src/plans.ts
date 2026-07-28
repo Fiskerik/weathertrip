@@ -13,7 +13,7 @@ import {
   type TripBrief,
   type TripPlan
 } from "@weathertrip/shared";
-import { getForecastBatch } from "./forecast.js";
+import { getForecastBatch, getHourlyForecast } from "./forecast.js";
 import { getRouteBetween, getRouteMatrix } from "./routing.js";
 
 type Candidate = {
@@ -34,6 +34,7 @@ export async function buildPlans(brief: TripBrief): Promise<PlanResponse | ApiEr
   }
 
   const filtered = planningDestinations.filter((destination) => {
+    if (brief.endLocation && sameCoordinates(destination.coordinates, brief.endLocation.coordinates)) return false;
     if (brief.borderRule === "stay-country") return destination.country === brief.startLocation.country;
     if (brief.borderRule === "leave-country") return destination.country !== brief.startLocation.country;
     return true;
@@ -79,16 +80,23 @@ export async function buildPlans(brief: TripBrief): Promise<PlanResponse | ApiEr
     };
   }
 
-  const matrixPoints = [brief.startLocation.coordinates, ...candidates.slice(0, 24).map((candidate) => candidate.destination.coordinates)];
+  const routeEnd = brief.endLocation?.coordinates;
+  const matrixCandidateLimit = routeEnd ? 23 : 24;
+  const matrixPoints = [
+    brief.startLocation.coordinates,
+    ...candidates.slice(0, matrixCandidateLimit).map((candidate) => candidate.destination.coordinates),
+    ...(routeEnd ? [routeEnd] : [])
+  ];
   const matrix = await getRouteMatrix(matrixPoints);
-  const primary = await buildRoutePlan(brief, candidates, matrix, 0, new Set(), forecastMap);
+  const endMatrixIndex = routeEnd ? matrixPoints.length - 1 : 0;
+  const primary = await buildRoutePlan(brief, candidates, matrix, endMatrixIndex, 0, new Set(), forecastMap);
   if (!primary) return impossibleRouteError(brief);
 
   const alternatives: TripPlan[] = [];
   const usedAlternativeSeeds = new Set<string>(primary.stops[0] ? [primary.stops[0].destination.id] : []);
   const primarySignature = primary.stops.map((stop) => stop.destination.id).join("-");
   for (let index = 1; index <= Math.min(24, candidates.length) && alternatives.length < 2; index += 1) {
-    const alternative = await buildRoutePlan(brief, candidates, matrix, index, usedAlternativeSeeds, forecastMap);
+    const alternative = await buildRoutePlan(brief, candidates, matrix, endMatrixIndex, index, usedAlternativeSeeds, forecastMap);
     if (!alternative) continue;
     if (alternative.stops.map((stop) => stop.destination.id).join("-") === primarySignature) continue;
     alternatives.push(alternative);
@@ -106,6 +114,7 @@ async function buildRoutePlan(
   brief: TripBrief,
   candidates: Candidate[],
   matrix: number[][],
+  endMatrixIndex: number,
   seed: number,
   banned: Set<string>,
   forecastMap: Map<string, DailyForecast[]>
@@ -114,10 +123,11 @@ async function buildRoutePlan(
     ? brief.durationDays >= 8 ? 3 : brief.durationDays >= 5 ? 2 : 1
     : brief.placeCount;
   const shortlist = candidates.filter((candidate) => !banned.has(candidate.destination.id));
-  const stops = findFeasibleSequence(brief, shortlist, candidates, matrix, count, seed);
+  const stops = findFeasibleSequence(brief, shortlist, candidates, matrix, endMatrixIndex, count, seed);
   if (!stops) return null;
 
-  const points = [brief.startLocation.coordinates, ...stops.map((stop) => stop.destination.coordinates), brief.startLocation.coordinates];
+  const endLocation = brief.endLocation ?? brief.startLocation;
+  const points = [brief.startLocation.coordinates, ...stops.map((stop) => stop.destination.coordinates), endLocation.coordinates];
   const directRoutes = await Promise.all(points.slice(0, -1).map((point, index) => getRouteBetween(point, points[index + 1]!)));
   const travelDays = directRoutes.reduce((sum, route) => sum + Math.max(1, Math.ceil(route.durationHours / brief.maxDriveHoursPerDay)), 0);
   const stayNights = brief.durationDays - travelDays;
@@ -161,17 +171,17 @@ async function buildRoutePlan(
     currentDay += segmentDays + nights[index]!;
   }
 
-  const returnRoute = directRoutes[directRoutes.length - 1]!;
+  const finalRoute = directRoutes[directRoutes.length - 1]!;
   planLegs.push(...splitRoute(
-    returnRoute.routePath,
-    returnRoute.distanceKm,
-    returnRoute.durationHours * 60,
+    finalRoute.routePath,
+    finalRoute.distanceKm,
+    finalRoute.durationHours * 60,
     brief.maxDriveHoursPerDay * 60,
     currentDay,
     stops[stops.length - 1]!.destination.name,
-    brief.startLocation.label,
+    endLocation.label,
     brief,
-    returnRoute.source
+    finalRoute.source
   ));
 
   const totalDrivingMinutes = planLegs.reduce((sum, leg) => sum + leg.drivingMinutes, 0);
@@ -196,6 +206,14 @@ async function buildRoutePlan(
     legs: planLegs,
     generatedAt: new Date().toISOString()
   };
+  await Promise.all(plan.stops.map(async (stop) => {
+    try {
+      const hourly = await getHourlyForecast(stop.destination, { start: stop.arrivalDate, end: stop.departureDate });
+      stop.hourlyForecast = hourly;
+    } catch {
+      stop.hourlyForecast = [];
+    }
+  }));
   plan.summary = summarizePlan(plan, brief);
   return plan;
 }
@@ -205,6 +223,7 @@ function findFeasibleSequence(
   shortlist: Candidate[],
   allCandidates: Candidate[],
   matrix: number[][],
+  endMatrixIndex: number,
   count: number,
   seed: number
 ): Candidate[] | null {
@@ -212,15 +231,18 @@ function findFeasibleSequence(
   const rotation = ordered.length ? seed % ordered.length : 0;
   const rotated = [...ordered.slice(rotation), ...ordered.slice(0, rotation)].slice(0, 30);
   const requiredFirstId = seed > 0 ? rotated[0]?.destination.id : undefined;
-  const indexById = new Map(allCandidates.map((candidate, index) => [candidate.destination.id, index + 1]));
+  const matrixCandidateLimit = endMatrixIndex === 0 ? 24 : endMatrixIndex - 1;
+  const indexById = new Map(allCandidates.slice(0, matrixCandidateLimit).map((candidate, index) => [candidate.destination.id, index + 1]));
   let bestSequence: Candidate[] | null = null;
   let bestValue = Number.NEGATIVE_INFINITY;
 
   function visit(sequence: Candidate[]): void {
     if (sequence.length === count) {
-      const points = [brief.startLocation.coordinates, ...sequence.map((candidate) => candidate.destination.coordinates), brief.startLocation.coordinates];
-      const minutes = points.slice(0, -1).reduce((sum, point, index) => sum + matrixMinutes(point, points[index + 1]!, index === 0 ? 0 : indexById.get(sequence[index - 1]!.destination.id) ?? 0, index === points.length - 2 ? 0 : indexById.get(sequence[index]!.destination.id) ?? 0, matrix), 0);
-      const travelDays = points.slice(0, -1).reduce((sum, _point, index) => sum + Math.max(1, Math.ceil(matrixMinutes(points[index]!, points[index + 1]!, index === 0 ? 0 : indexById.get(sequence[index - 1]!.destination.id) ?? 0, index === points.length - 2 ? 0 : indexById.get(sequence[index]!.destination.id) ?? 0, matrix) / (brief.maxDriveHoursPerDay * 60))), 0);
+      const endCoordinates = brief.endLocation?.coordinates ?? brief.startLocation.coordinates;
+      const points = [brief.startLocation.coordinates, ...sequence.map((candidate) => candidate.destination.coordinates), endCoordinates];
+      const matrixIndices = [0, ...sequence.map((candidate) => indexById.get(candidate.destination.id)), endMatrixIndex];
+      const minutes = points.slice(0, -1).reduce((sum, point, index) => sum + matrixMinutes(point, points[index + 1]!, matrixIndices[index], matrixIndices[index + 1], matrix), 0);
+      const travelDays = points.slice(0, -1).reduce((sum, _point, index) => sum + Math.max(1, Math.ceil(matrixMinutes(points[index]!, points[index + 1]!, matrixIndices[index], matrixIndices[index + 1], matrix) / (brief.maxDriveHoursPerDay * 60))), 0);
       if (travelDays + count > brief.durationDays) return;
       const countries = new Set(sequence.map((candidate) => candidate.destination.country));
       const value = sequence.reduce((sum, candidate) => sum + candidate.weatherScore, 0) / count + countries.size * 5 - minutes / 180;
@@ -245,11 +267,12 @@ function findFeasibleSequence(
 function matrixMinutes(
   from: Coordinates,
   to: Coordinates,
-  fromIndex: number,
-  toIndex: number,
+  fromIndex: number | undefined,
+  toIndex: number | undefined,
   matrix: number[][]
 ): number {
-  return matrix[fromIndex]?.[toIndex] ?? estimateHours(from, to) * 60;
+  const duration = fromIndex == null || toIndex == null ? undefined : matrix[fromIndex]?.[toIndex];
+  return Number.isFinite(duration) && duration! > 0 ? duration! : estimateHours(from, to) * 60;
 }
 
 function splitRoute(
@@ -270,8 +293,8 @@ function splitRoute(
     const endFraction = (index + 1) / days;
     const segmentMinutes = Math.round((drivingMinutes / days) * 10) / 10;
     const segmentPath = [pointAlongPath(path, startFraction), pointAlongPath(path, endFraction)];
-    const segmentFrom = index === 0 ? fromName : `Route stop ${index}`;
-    const segmentTo = index === days - 1 ? toName : `Route stop ${index + 1}`;
+    const segmentFrom = fromName;
+    const segmentTo = toName;
     const leg: PlanLeg = {
       id: `leg-${firstDay}-${index}-${segmentFrom}-${segmentTo}`,
       day: firstDay + index,
@@ -282,7 +305,8 @@ function splitRoute(
       elapsedMinutes: segmentMinutes,
       routePath: segmentPath,
       breaks: [],
-      source
+      source,
+      isFinalSegment: index === days - 1
     };
     const breaks = buildBreaksForLeg(segmentMinutes, brief, `${segmentFrom}-${segmentTo}`, segmentPath[1] ?? segmentPath[0]!);
     leg.breaks = breaks;
@@ -380,6 +404,10 @@ function estimateHours(start: Coordinates, end: Coordinates): number {
   const longitude = (end.longitude - start.longitude) * radians;
   const value = Math.sin(latitude / 2) ** 2 + Math.cos(start.latitude * radians) * Math.cos(end.latitude * radians) * Math.sin(longitude / 2) ** 2;
   return (6371 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value)) * 1.2) / 72;
+}
+
+function sameCoordinates(left: Coordinates, right: Coordinates): boolean {
+  return Math.abs(left.latitude - right.latitude) < 0.02 && Math.abs(left.longitude - right.longitude) < 0.02;
 }
 
 function dateAt(start: string, dayOffset: number): string {

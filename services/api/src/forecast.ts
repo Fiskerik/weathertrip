@@ -1,4 +1,4 @@
-import type { Coordinates, DailyForecast, Destination, TripRequest } from "@weathertrip/shared";
+import type { Coordinates, DailyForecast, Destination, HourlyForecast, TripRequest } from "@weathertrip/shared";
 
 type OpenMeteoDailyResponse = {
   daily?: {
@@ -9,9 +9,15 @@ type OpenMeteoDailyResponse = {
     sunshine_duration?: number[];
     wind_speed_10m_max?: number[];
   };
+  hourly?: {
+    time?: string[];
+    temperature_2m?: number[];
+    weather_code?: number[];
+  };
 };
 
 const forecastCache = new Map<string, DailyForecast[]>();
+const hourlyForecastCache = new Map<string, HourlyForecast[]>();
 
 export async function getForecastBatch(
   destinations: Destination[],
@@ -95,6 +101,38 @@ export async function getForecast(destination: Destination, request: TripRequest
 
 export function clearForecastCache(): void {
   forecastCache.clear();
+  hourlyForecastCache.clear();
+}
+
+export async function getHourlyForecast(
+  destination: Destination,
+  dateRange: { start: string; end: string }
+): Promise<HourlyForecast[]> {
+  const cacheKey = `${destination.id}:${dateRange.start}:${dateRange.end}`;
+  const cached = hourlyForecastCache.get(cacheKey);
+  if (cached) return cached;
+
+  const params = new URLSearchParams({
+    latitude: String(destination.coordinates.latitude),
+    longitude: String(destination.coordinates.longitude),
+    hourly: "temperature_2m,weather_code",
+    timezone: "auto",
+    start_date: dateRange.start,
+    end_date: dateRange.end
+  });
+  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
+  if (!response.ok) throw new Error(`Open-Meteo returned ${response.status}`);
+
+  const body = await response.json() as OpenMeteoDailyResponse;
+  const hourly = body.hourly;
+  if (!hourly?.time?.length) return [];
+  const forecast = hourly.time.map((time, index) => ({
+    time,
+    temperatureC: round(hourly.temperature_2m?.[index] ?? 0),
+    ...(hourly.weather_code?.[index] == null ? {} : { weatherCode: hourly.weather_code[index]! })
+  }));
+  hourlyForecastCache.set(cacheKey, forecast);
+  return forecast;
 }
 
 async function fetchForecastBatch(
