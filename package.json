@@ -9,6 +9,7 @@
     "packages/*"
   ],
   "scripts": {
+    "build:api": "npm --workspace @weathertrip/shared run build && npm --workspace @weathertrip/api run build",
     "dev:api": "npm --workspace @weathertrip/api run dev",
     "dev:web": "npm --workspace @weathertrip/web run dev",
     "dev:mobile": "npm --workspace @weathertrip/mobile run start",
@@ -16,7 +17,7 @@
     "check": "npm --workspace @weathertrip/shared run typecheck && npm --workspace @weathertrip/api run typecheck && npm --workspace @weathertrip/web run typecheck && npm --workspace @weathertrip/mobile run typecheck"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "devDependencies": {
     "pngjs": "^7.0.0",
